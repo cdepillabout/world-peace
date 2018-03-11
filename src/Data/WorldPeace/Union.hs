@@ -340,7 +340,7 @@ instance
   {-# INLINE unionPrism #-}
 
 -- | This is a helpful 'Constraint' synonym to assert that @a@ is a member of
--- @as@.
+-- @as@.  You can see how it is used in functions like 'openUnionLift'.
 type IsMember (a :: u) (as :: [u]) = UElem a as (RIndex a as)
 
 ---------------
