@@ -1,0 +1,49 @@
+name:                world-peace
+version:             0.1.0.0
+synopsis:            Open Union and Open Product types
+description:         Please see <https://github.com/cdepillabout/world-peace#readme README.md>.
+homepage:            https://github.com/cdepillabout/world-peace
+license:             BSD3
+license-file:        LICENSE
+author:              Dennis Gosnell
+maintainer:          cdep.illabout@gmail.com
+copyright:           2017-2018 Dennis Gosnell
+category:            Data
+build-type:          Simple
+extra-source-files:  CHANGELOG.md
+                   , README.md
+                   , stack.yaml
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  exposed-modules:     Data.WorldPeace
+                     , Data.WorldPeace.Internal
+                     , Data.WorldPeace.Internal.Prism
+                     , Data.WorldPeace.Product
+                     , Data.WorldPeace.Union
+  build-depends:       base >= 4.9 && < 5
+                     , aeson
+                     -- , bytestring
+                     , deepseq
+                     , profunctors
+                     , tagged
+                     -- , text
+  default-language:    Haskell2010
+  ghc-options:         -Wall -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fwarn-monomorphism-restriction
+  other-extensions:    QuasiQuotes
+                     , TemplateHaskell
+
+test-suite world-peace-doctest
+  type:                exitcode-stdio-1.0
+  main-is:             DocTest.hs
+  hs-source-dirs:      test
+  build-depends:       base
+                     , doctest
+                     , Glob
+  default-language:    Haskell2010
+  ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
+
+source-repository head
+  type:     git
+  location: git@github.com:cdepillabout/world-peace.git
