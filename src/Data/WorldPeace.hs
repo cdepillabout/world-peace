@@ -1,5 +1,5 @@
 {- |
-Module      :  Servant.Checked.Exceptions
+Module      :  Data.WorldPeace
 
 Copyright   :  Dennis Gosnell 2017
 License     :  BSD3
@@ -13,7 +13,7 @@ Portability :  unknown
 module Data.WorldPeace
   (
   -- *** 'OpenUnion'
-  , OpenUnion
+    OpenUnion
   -- **** 'OpenUnion' Helpers
   , openUnion
   , fromOpenUnion

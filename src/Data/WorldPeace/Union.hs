@@ -63,23 +63,34 @@ module Data.WorldPeace.Union
   -- $setup
   ) where
 
--- Imports for Union stuff
 import Control.Applicative ((<|>))
 import Control.DeepSeq (NFData(rnf))
-import Data.Aeson
-       (FromJSON(parseJSON), ToJSON(toJSON), Value)
+import Data.Aeson (FromJSON(parseJSON), ToJSON(toJSON), Value)
 import Data.Aeson.Types (Parser)
 import Data.Functor.Identity (Identity(Identity, runIdentity))
 import Data.Typeable (Typeable)
 import Text.Read (Read(readPrec), ReadPrec, (<++))
 
-import Data.WorldPeace.Internal.Prism (Prism, Prism', iso, preview, prism, prism', review)
-import Data.WorldPeace.Internal.Product
-       (Product(Cons, Nil), ToOpenProduct, ToProduct, tupleToOpenProduct,
-        tupleToProduct)
+import Data.WorldPeace.Internal.Prism
+  ( Prism
+  , Prism'
+  , iso
+  , preview
+  , prism
+  , prism'
+  , review
+  )
+import Data.WorldPeace.Product
+  ( Product(Cons, Nil)
+  , ToOpenProduct
+  , ToProduct
+  , tupleToOpenProduct
+  , tupleToProduct
+  )
 
 -- $setup
 -- >>> :set -XDataKinds
+-- >>> :set -XGADTs
 -- >>> :set -XTypeOperators
 -- >>> import Data.Text (Text)
 -- >>> import Text.Read (readMaybe)
@@ -142,7 +153,7 @@ data Nat = Z | S !Nat
 -- out whether you are holding a 'String' or 'Int':
 --
 -- >>> let u = That (This (Identity 1)) :: Union Identity '[String, Int]
--- >>> {:
+-- >>> :{
 --   case u of
 --     This (Identity str) -> "we got a string: " ++ str
 --     That (This (Identity int)) -> "we got an int: " ++ show int

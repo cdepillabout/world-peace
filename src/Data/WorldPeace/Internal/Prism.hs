@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 
 {- |
-Module      :  Data.WorldPeace.Prism
+Module      :  Data.WorldPeace.Internal.Prism
 License     :  BSD3
 Maintainer  :  Dennis Gosnell (cdep.illabout@gmail.com)
 Stability   :  experimental
@@ -13,7 +13,7 @@ found in the lens package.  These functions are redefined here to remove the
 dependency on the lens package.
 -}
 
-module Servant.Checked.Exceptions.Internal.Prism
+module Data.WorldPeace.Internal.Prism
   ( Prism
   , prism
   , Prism'
