@@ -95,9 +95,9 @@ import Data.WorldPeace.Product
 -- >>> import Data.Text (Text)
 -- >>> import Text.Read (readMaybe)
 
-----------------------------------------------------
--- Type-level helpers (from Data.Vinyl.TypeLevel) --
-----------------------------------------------------
+------------------------
+-- Type-level helpers --
+------------------------
 
 -- | A partial relation that gives the index of a value in a list.
 --
