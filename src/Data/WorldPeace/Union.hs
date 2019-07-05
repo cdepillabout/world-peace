@@ -55,7 +55,7 @@ module Data.WorldPeace.Union
   , IsMember
   , Contains
   , ElemRemove(..)
-  , CalcFinalList
+  , Remove
   -- , ElemRemove(..)
   -- * OpenUnion
   , OpenUnion
@@ -381,11 +381,11 @@ instance
   {-# INLINE unionPrism #-}
 
 class ElemRemove a as where
-  unionRemove :: Union f as -> Either (f a) (Union f (CalcFinalList a as))
+  unionRemove :: Union f as -> Either (f a) (Union f (Remove a as))
 
 instance
     ( caseMatch ~ RemoveCase a as
-    , newList ~ CalcFinalList a as
+    , newList ~ Remove a as
     , ElemRemove' a as newList caseMatch
     ) =>
     ElemRemove a as where
@@ -411,14 +411,10 @@ instance ElemRemove' a '[b] '[b] 'CaseLastDiff where
 data Cases = CaseLastSame | CaseLastDiff | CaseRecursiveSame | CaseRecursiveDiff
 
 type family Remove (a :: k) (as :: [k]) :: [k] where
-  Remove a (a ': as) = Remove a as
-  Remove a (b ': as) = b ': Remove a as
-
-type family CalcFinalList (a :: k) (as :: [k]) :: [k] where
-  CalcFinalList a '[a] = '[]
-  CalcFinalList a '[b] = '[b]
-  CalcFinalList a (a ': b ': bs) = CalcFinalList a (b ': bs)
-  CalcFinalList a (b ': c ': cs) = b ': CalcFinalList a (c ': cs)
+  Remove a '[a] = '[]
+  Remove a '[b] = '[b]
+  Remove a (a ': b ': bs) = Remove a (b ': bs)
+  Remove a (b ': c ': cs) = b ': Remove a (c ': cs)
 
 type family RemoveCase (a :: k) (as :: [k]) :: Cases where
   RemoveCase a '[a] = 'CaseLastSame
@@ -427,7 +423,7 @@ type family RemoveCase (a :: k) (as :: [k]) :: Cases where
   RemoveCase a (b ': bs) = 'CaseRecursiveDiff
 
 instance
-    ( finalList ~ CalcFinalList a (b ': bs)
+    ( finalList ~ Remove a (b ': bs)
     , caseMatch ~ RemoveCase a (b ': bs)
     , ElemRemove' a (b ': bs) finalList caseMatch
     ) =>
@@ -444,9 +440,9 @@ instance
       Right u2 -> Right u2
 
 instance
-    ( finalList ~ (b ': CalcFinalList a (c ': cs))
+    ( finalList ~ (b ': Remove a (c ': cs))
     , caseMatch ~ RemoveCase a (c ': cs)
-    , ElemRemove' a (c ': cs) (CalcFinalList a (c ': cs)) caseMatch
+    , ElemRemove' a (c ': cs) (Remove a (c ': cs)) caseMatch
     ) =>
     ElemRemove' a (b ': c ': cs) finalList 'CaseRecursiveDiff where
   unionRemove'
@@ -456,7 +452,7 @@ instance
     -> Either (f a) (Union f finalList)
   unionRemove' _ (This b) = Right (This b)
   unionRemove' _ (That u) =
-    case unionRemove' (Proxy @caseMatch) u :: Either (f a) (Union f (CalcFinalList a (c ': cs))) of
+    case unionRemove' (Proxy @caseMatch) u :: Either (f a) (Union f (Remove a (c ': cs))) of
       Left fa -> Left fa
       Right u2 -> Right (That u2)
 
@@ -495,7 +491,7 @@ instance
 -- Identity 3.5
 unionHandle
   :: ElemRemove a as
-  => (Union f (CalcFinalList a as) -> b)
+  => (Union f (Remove a as) -> b)
   -> (f a -> b)
   -> Union f as
   -> b
