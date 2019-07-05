@@ -12,6 +12,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -52,6 +53,7 @@ module Data.WorldPeace.Union
   , UElem(..)
   , IsMember
   , Contains
+  -- , ElemRemove(..)
   -- * OpenUnion
   , OpenUnion
   , openUnion
@@ -72,6 +74,7 @@ import Data.Aeson (FromJSON(parseJSON), ToJSON(toJSON), Value)
 import Data.Aeson.Types (Parser)
 import Data.Functor.Identity (Identity(Identity, runIdentity))
 import Data.Kind (Constraint)
+import Data.Proxy
 import Data.Typeable (Typeable)
 import Text.Read (Read(readPrec), ReadPrec, (<++))
 
@@ -192,6 +195,8 @@ data Union (f :: u -> *) (as :: [u]) where
   deriving (Typeable)
 
 -- | Case analysis for 'Union'.
+--
+-- See 'unionHandle' for a more flexible version of this.
 --
 -- ==== __Examples__
 --
@@ -342,8 +347,8 @@ _That = prism That (union Right (Left . This))
 --
 -- As an end-user, you should never need to implement an additional instance of
 -- this typeclass.
-class i ~ RIndex a as => UElem (a :: u) (as :: [u]) (i :: Nat) where
-  {-# MINIMAL unionPrism | unionLift, unionMatch #-}
+class i ~ RIndex a as => UElem (a :: k) (as :: [k]) (i :: Nat) where
+  {-# MINIMAL unionPrism | (unionLift, unionMatch) #-}
 
   -- | This is implemented as @'prism'' 'unionLift' 'unionMatch'@.
   unionPrism :: Prism' (Union f as) (f a)
@@ -367,9 +372,188 @@ instance
     , UElem a as i
     )
     => UElem a (b ': as) ('S i) where
+
   unionPrism :: Prism' (Union f (b ': as)) (f a)
   unionPrism = _That . unionPrism
   {-# INLINE unionPrism #-}
+
+class ElemRemove a as where
+  unionRemove :: Union f as -> Either (f a) (Union f (CalcFinalList a as))
+
+instance
+    ( caseMatch ~ RemoveCase a as
+    , newList ~ CalcFinalList a as
+    , ElemRemove' a as newList caseMatch
+    ) =>
+    ElemRemove a as where
+  unionRemove :: Union f as -> Either (f a) (Union f newList)
+  unionRemove = unionRemove' (Proxy @caseMatch)
+
+class
+    ElemRemove' (a :: k) (as :: [k]) (newAs :: [k]) (caseMatch :: Cases) where
+  unionRemove' :: Proxy caseMatch -> Union f as -> Either (f a) (Union f newAs)
+
+instance ElemRemove' a '[a] '[] 'CaseLastSame where
+  unionRemove'
+    :: Proxy 'CaseLastSame -> Union f '[a] -> Either (f a) (Union f '[])
+  unionRemove' _ (This a) = Left a
+  unionRemove' _ (That u) = absurdUnion u
+
+instance ElemRemove' a '[b] '[b] 'CaseLastDiff where
+  unionRemove'
+    :: Proxy 'CaseLastDiff -> Union f '[b] -> Either (f a) (Union f '[b])
+  unionRemove' _ (This a) = Right (This a)
+  unionRemove' _ (That u) = absurdUnion u
+
+data Cases = CaseLastSame | CaseLastDiff | CaseRecursiveSame | CaseRecursiveDiff
+
+type family Remove (a :: k) (as :: [k]) :: [k] where
+  Remove a (a ': as) = Remove a as
+  Remove a (b ': as) = b ': Remove a as
+
+type family CalcFinalList (a :: k) (as :: [k]) :: [k] where
+  CalcFinalList a '[a] = '[]
+  CalcFinalList a '[b] = '[b]
+  CalcFinalList a (a ': b ': bs) = CalcFinalList a (b ': bs)
+  CalcFinalList a (b ': c ': cs) = b ': CalcFinalList a (c ': cs)
+
+type family RemoveCase (a :: k) (as :: [k]) :: Cases where
+  RemoveCase a '[a] = 'CaseLastSame
+  RemoveCase a '[b] = 'CaseLastDiff
+  RemoveCase a (a ': bs) = 'CaseRecursiveSame
+  RemoveCase a (b ': bs) = 'CaseRecursiveDiff
+
+instance
+    ( finalList ~ CalcFinalList a (b ': bs)
+    , caseMatch ~ RemoveCase a (b ': bs)
+    , ElemRemove' a (b ': bs) finalList caseMatch
+    ) =>
+    ElemRemove' a (a ': b ': bs) finalList 'CaseRecursiveSame where
+  unionRemove'
+    :: forall f
+     . Proxy 'CaseRecursiveSame
+    -> Union f (a ': b ': bs)
+    -> Either (f a) (Union f finalList)
+  unionRemove' _ (This a) = Left a
+  unionRemove' _ (That u) =
+    case unionRemove' (Proxy @caseMatch) u :: Either (f a) (Union f finalList) of
+      Left fa -> Left fa
+      Right u2 -> Right u2
+
+instance
+    ( finalList ~ (b ': CalcFinalList a (c ': cs))
+    , caseMatch ~ RemoveCase a (c ': cs)
+    , ElemRemove' a (c ': cs) (CalcFinalList a (c ': cs)) caseMatch
+    ) =>
+    ElemRemove' a (b ': c ': cs) finalList 'CaseRecursiveDiff where
+  unionRemove'
+    :: forall f
+     . Proxy 'CaseRecursiveDiff
+    -> Union f (b ': c ': cs)
+    -> Either (f a) (Union f finalList)
+  unionRemove' _ (This b) = Right (This b)
+  unionRemove' _ (That u) =
+    case unionRemove' (Proxy @caseMatch) u :: Either (f a) (Union f (CalcFinalList a (c ': cs))) of
+      Left fa -> Left fa
+      Right u2 -> Right (That u2)
+      -- Right u2 -> Right u2
+    -- case unionRemove' (Proxy @caseMatch) u :: Either (f a) (Union f finalList) of
+    --   Left fa -> Left fa
+    --   Right u2 -> Right u2
+
+-- instance
+--     ( newAs ~ Remove a as
+--     , ElemRemove' a as newAs (RemoveCase a as)
+--     ) =>
+--     ElemRemove' a (a ': as) newAs 'CaseSame where
+--   unionRemove'
+--     :: Proxy 'CaseSame -> Union f (a ': as) -> Either (f a) (Union f newAs)
+--   unionRemove' _ (This a) = Left a
+--   unionRemove' _ (That u) = unionRemove' (Proxy @(RemoveCase a as)) u
+
+-- instance
+--     ( newAs ~ (b ': Remove a as)
+--     , ElemRemove' a as newAs (RemoveCase a as)
+--     ) =>
+--     ElemRemove' a (b ': as) newAs 'CaseDifferent where
+--   unionRemove'
+--     :: forall f. Proxy 'CaseDifferent -> Union f (b ': as) -> Either (f a) (Union f newAs)
+--   unionRemove' _ (This b) = Right (This b)
+--   unionRemove' _ (That (u :: Union f as)) = -- _ :: Either (f a) (Union f newAs)
+--     case unionRemove' (Proxy @(RemoveCase a as)) u :: Either (f a) (Union f newAs) of
+--       Left fa -> Left fa
+--       Right u2 -> Right u2
+    --   Left fa -> Left fa
+    --   Right u2 -> Right u2
+
+-- instance ElemRemove a '[] where
+--   unionRemove :: Union f '[] -> Either (f a) (Union f (Remove a '[]))
+--   unionRemove = absurdUnion
+
+-- instance ElemRemove a as => ElemRemove a (a ': as) where
+--   unionRemove :: forall f. Union f (a ': as) -> Either (f a) (Union f (Remove a as))
+--   unionRemove (This a) = Left a
+--   unionRemove (That u) = unionRemove u
+
+-- instance ElemRemove a as => ElemRemove a (b ': as) where
+--   unionRemove
+--     :: forall f. Union f (b ': as) -> Either (f a) (Union f (Remove a (b ': as)))
+--   unionRemove (This b) = unsafeCoerce $ Right (This b)
+--   unionRemove (That u) =
+--     case unionRemove u :: Either (f a) (Union f (Remove a as)) of
+--       Left fa -> Left fa
+--       Right u2 -> unsafeCoerce (Right (That u2))
+
+---- class ElemRemove a as newAs | a as -> newAs, as newAs -> a, a newAs -> as where
+--class ElemRemove a as newAs where
+--  unionRemove :: Union f as -> Either (f a) (Union f newAs)
+
+--instance {-# OVERLAPPING #-} ElemRemove a (a ': as) as where
+--  unionRemove :: Union f (a ': as) -> Either (f a) (Union f as)
+--  unionRemove (This a) = Left a
+--  unionRemove (That u) = Right u
+
+--instance {-# OVERLAPPABLE #-}
+--    (ElemRemove a as newAs) =>
+--    ElemRemove a (b ': as) (b ': newAs) where
+--  unionRemove :: forall f. Union f (b ': as) -> Either (f a) (Union f (b ': newAs))
+--  unionRemove (This b) = Right (This b)
+--  unionRemove (That u) =
+--    fmap That (unionRemove u :: Either (f a) (Union f newAs))
+
+---- | Handle a single case on a 'Union'.  This is similar to 'union' but lets
+---- you handle any case within the 'Union'.
+----
+---- The type inference for this is pretty bad, so you must be liberal with
+---- type signatures.
+----
+---- This doesn't work for a 'Union' with two of the same types like
+---- @'Union' f \'['Double', 'Double']@.
+----
+---- ==== __Examples__
+----
+---- Handling the first item in a 'Union'.
+----
+---- >>> let u = This 3.5 :: Union Identity '[Double, Int]
+---- >>> let printDouble = print :: Identity Double -> IO ()
+---- >>> let printUnion = print :: Union Identity '[Int] -> IO ()
+---- >>> unionHandle printUnion printDouble u
+---- Identity 3.5
+----
+---- Handling a middle item in a 'Union'.
+----
+---- >>> let u2 = That (This 3.5) :: Union Identity '[Double, Double, Int]
+---- >>> let printUnion = print :: Union Identity '[Double, Int] -> IO ()
+---- >>> unionHandle printUnion printDouble u2
+---- Identity 3.5
+--unionHandle
+--  :: ElemRemove a as newAs
+--  => (Union f newAs -> b)
+--  -> (f a -> b)
+--  -> Union f as
+--  -> b
+--unionHandle unionHandler aHandler u =
+--  either aHandler unionHandler $ unionRemove u
 
 ---------------
 -- OpenUnion --
