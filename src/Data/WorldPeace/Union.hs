@@ -41,6 +41,7 @@ module Data.WorldPeace.Union
   , catchesUnion
   , absurdUnion
   , umap
+  , relaxUnion
   -- ** Optics
   , _This
   , _That
@@ -59,6 +60,7 @@ module Data.WorldPeace.Union
   , openUnionLift
   , openUnionMatch
   , catchesOpenUnion
+  , relaxOpenUnion
   -- * Setup code for doctests
   -- $setup
   ) where
@@ -68,6 +70,7 @@ import Control.DeepSeq (NFData(rnf))
 import Data.Aeson (FromJSON(parseJSON), ToJSON(toJSON), Value)
 import Data.Aeson.Types (Parser)
 import Data.Functor.Identity (Identity(Identity, runIdentity))
+import Data.Kind (Constraint)
 import Data.Typeable (Typeable)
 import Text.Read (Read(readPrec), ReadPrec, (<++))
 
@@ -89,11 +92,14 @@ import Data.WorldPeace.Product
   )
 
 -- $setup
+-- >>> :set -XConstraintKinds
 -- >>> :set -XDataKinds
 -- >>> :set -XGADTs
+-- >>> :set -XKindSignatures
 -- >>> :set -XTypeOperators
 -- >>> import Data.Text (Text)
 -- >>> import Text.Read (readMaybe)
+-- >>> import Data.Type.Equality ((:~:)(Refl))
 
 ------------------------
 -- Type-level helpers --
@@ -105,7 +111,6 @@ import Data.WorldPeace.Product
 --
 -- Find the first item:
 --
--- >>> import Data.Type.Equality ((:~:)(Refl))
 -- >>> Refl :: RIndex String '[String, Int] :~: 'Z
 -- Refl
 --
@@ -120,7 +125,6 @@ type family RIndex (r :: k) (rs :: [k]) :: Nat where
 -- | Change a list of types into a list of functions that take the given type
 -- and return @x@.
 --
--- >>> import Data.Type.Equality ((:~:)(Refl))
 -- >>> Refl :: ReturnX Double '[String, Int] :~: '[String -> Double, Int -> Double]
 -- Refl
 --
@@ -135,6 +139,22 @@ type family ReturnX x as where
 -- | A mere approximation of the natural numbers. And their image as lifted by
 -- @-XDataKinds@ corresponds to the actual natural numbers.
 data Nat = Z | S !Nat
+
+-- | This is a helpful 'Constraint' synonym to assert that @a@ is a member of
+-- @as@.  You can see how it is used in functions like 'openUnionLift'.
+type IsMember (a :: u) (as :: [u]) = UElem a as (RIndex a as)
+
+-- | A type family to assert that all of the types in a list are contained
+-- within another list.
+--
+-- >>> Refl :: Contains '[String] '[String, Char] :~: (IsMember String '[String, Char], (() :: Constraint))
+-- Refl
+--
+-- >>> Refl :: Contains '[] '[Int, Char] :~: (() :: Constraint)
+-- Refl
+type family Contains (as :: [k]) (bs :: [k]) :: Constraint where
+  Contains '[] _ = ()
+  Contains (a ': as) bs = (IsMember a bs, Contains as bs)
 
 -----------------------------
 -- Union (from Data.Union) --
@@ -183,7 +203,7 @@ data Union (f :: u -> *) (as :: [u]) where
 --
 -- Here is an example of matching on a 'That':
 --
--- >>> let v = That (This (Identity 3.3)) :: Union Identity '[String, Double, Int]
+-- >>> let v = That (This (Identity 3.5)) :: Union Identity '[String, Double, Int]
 -- >>> union (const "not a String") runIdent v
 -- "not a String"
 union :: (Union f as -> c) -> (f a -> c) -> Union f (a ': as) -> c
@@ -248,6 +268,17 @@ catchesUnion
   => tuple -> Union f as -> f x
 catchesUnion tuple u = catchesUnionProduct (tupleToProduct tuple) u
 
+-- | Relaxes a 'Union' to a larger set of types.
+--
+-- Note that the result types have to completely contain the input types.
+--
+-- >>> let u = This (Identity 3.5) :: Union Identity '[Double, String]
+-- >>> relaxUnion u :: Union Identity '[Char, Double, Int, String, Float]
+-- Identity 3.5
+relaxUnion :: Contains as bs => Union f as -> Union f bs
+relaxUnion (This as) = unionLift as
+relaxUnion (That u) = relaxUnion u
+
 -- | Lens-compatible 'Prism' for 'This'.
 --
 -- ==== __Examples__
@@ -265,7 +296,7 @@ catchesUnion tuple u = catchesUnionProduct (tupleToProduct tuple) u
 --
 -- Use '_This' to try to destruct a 'Union' into a @f a@ (unsuccessfully):
 --
--- >>> let v = That (This (Identity 3.3)) :: Union Identity '[String, Double, Int]
+-- >>> let v = That (This (Identity 3.5)) :: Union Identity '[String, Double, Int]
 -- >>> preview _This v :: Maybe (Identity String)
 -- Nothing
 _This :: Prism (Union f (a ': as)) (Union f (b ': as)) (f a) (f b)
@@ -339,10 +370,6 @@ instance
   unionPrism = _That . unionPrism
   {-# INLINE unionPrism #-}
 
--- | This is a helpful 'Constraint' synonym to assert that @a@ is a member of
--- @as@.  You can see how it is used in functions like 'openUnionLift'.
-type IsMember (a :: u) (as :: [u]) = UElem a as (RIndex a as)
-
 ---------------
 -- OpenUnion --
 ---------------
@@ -363,7 +390,7 @@ type OpenUnion = Union Identity
 --
 -- Here is an example of unsuccessfully matching:
 --
--- >>> let double = 3.3 :: Double
+-- >>> let double = 3.5 :: Double
 -- >>> let p = openUnionLift double :: OpenUnion '[String, Double, Int]
 -- >>> openUnion (const "not a String") id p
 -- "not a String"
@@ -384,7 +411,7 @@ openUnion onThat onThis = union onThat (onThis . runIdentity)
 --
 -- Here is an example of unsuccessfully matching:
 --
--- >>> let double = 3.3 :: Double
+-- >>> let double = 3.5 :: Double
 -- >>> let p = openUnionLift double :: OpenUnion '[String, Double, Int]
 -- >>> fromOpenUnion (const "not a String") p
 -- "not a String"
@@ -431,7 +458,7 @@ openUnionLift = review openUnionPrism
 --
 -- Failure matching:
 --
--- >>> let double = 3.3 :: Double
+-- >>> let double = 3.5 :: Double
 -- >>> let p = openUnionLift double :: OpenUnion '[Double, String]
 -- >>> openUnionMatch p :: Maybe String
 -- Nothing
@@ -491,6 +518,15 @@ catchesOpenUnion
 catchesOpenUnion tuple u =
   runIdentity $
     catchesUnionProduct (tupleToOpenProduct tuple) u
+
+-- | Just like 'relaxUnion' but for 'OpenUnion'.
+--
+-- >>> let u = openUnionLift 3.5 :: Union Identity '[Double, String]
+-- >>> relaxOpenUnion u :: Union Identity '[Char, Double, Int, String, Float]
+-- Identity 3.5
+relaxOpenUnion :: Contains as bs => OpenUnion as -> OpenUnion bs
+relaxOpenUnion (This as) = unionLift as
+relaxOpenUnion (That u) = relaxUnion u
 
 ---------------
 -- Instances --
