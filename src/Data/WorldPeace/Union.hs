@@ -51,6 +51,7 @@ module Data.WorldPeace.Union
   , ReturnX
   , UElem(..)
   , IsMember
+  , Contains
   -- * OpenUnion
   , OpenUnion
   , openUnion
