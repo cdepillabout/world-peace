@@ -43,6 +43,7 @@ module Data.WorldPeace.Union
   , absurdUnion
   , umap
   , relaxUnion
+  , unionHandle
   -- ** Optics
   , _This
   , _That
@@ -53,6 +54,8 @@ module Data.WorldPeace.Union
   , UElem(..)
   , IsMember
   , Contains
+  , ElemRemove(..)
+  , CalcFinalList
   -- , ElemRemove(..)
   -- * OpenUnion
   , OpenUnion
@@ -456,104 +459,48 @@ instance
     case unionRemove' (Proxy @caseMatch) u :: Either (f a) (Union f (CalcFinalList a (c ': cs))) of
       Left fa -> Left fa
       Right u2 -> Right (That u2)
-      -- Right u2 -> Right u2
-    -- case unionRemove' (Proxy @caseMatch) u :: Either (f a) (Union f finalList) of
-    --   Left fa -> Left fa
-    --   Right u2 -> Right u2
 
--- instance
---     ( newAs ~ Remove a as
---     , ElemRemove' a as newAs (RemoveCase a as)
---     ) =>
---     ElemRemove' a (a ': as) newAs 'CaseSame where
---   unionRemove'
---     :: Proxy 'CaseSame -> Union f (a ': as) -> Either (f a) (Union f newAs)
---   unionRemove' _ (This a) = Left a
---   unionRemove' _ (That u) = unionRemove' (Proxy @(RemoveCase a as)) u
-
--- instance
---     ( newAs ~ (b ': Remove a as)
---     , ElemRemove' a as newAs (RemoveCase a as)
---     ) =>
---     ElemRemove' a (b ': as) newAs 'CaseDifferent where
---   unionRemove'
---     :: forall f. Proxy 'CaseDifferent -> Union f (b ': as) -> Either (f a) (Union f newAs)
---   unionRemove' _ (This b) = Right (This b)
---   unionRemove' _ (That (u :: Union f as)) = -- _ :: Either (f a) (Union f newAs)
---     case unionRemove' (Proxy @(RemoveCase a as)) u :: Either (f a) (Union f newAs) of
---       Left fa -> Left fa
---       Right u2 -> Right u2
-    --   Left fa -> Left fa
-    --   Right u2 -> Right u2
-
--- instance ElemRemove a '[] where
---   unionRemove :: Union f '[] -> Either (f a) (Union f (Remove a '[]))
---   unionRemove = absurdUnion
-
--- instance ElemRemove a as => ElemRemove a (a ': as) where
---   unionRemove :: forall f. Union f (a ': as) -> Either (f a) (Union f (Remove a as))
---   unionRemove (This a) = Left a
---   unionRemove (That u) = unionRemove u
-
--- instance ElemRemove a as => ElemRemove a (b ': as) where
---   unionRemove
---     :: forall f. Union f (b ': as) -> Either (f a) (Union f (Remove a (b ': as)))
---   unionRemove (This b) = unsafeCoerce $ Right (This b)
---   unionRemove (That u) =
---     case unionRemove u :: Either (f a) (Union f (Remove a as)) of
---       Left fa -> Left fa
---       Right u2 -> unsafeCoerce (Right (That u2))
-
----- class ElemRemove a as newAs | a as -> newAs, as newAs -> a, a newAs -> as where
---class ElemRemove a as newAs where
---  unionRemove :: Union f as -> Either (f a) (Union f newAs)
-
---instance {-# OVERLAPPING #-} ElemRemove a (a ': as) as where
---  unionRemove :: Union f (a ': as) -> Either (f a) (Union f as)
---  unionRemove (This a) = Left a
---  unionRemove (That u) = Right u
-
---instance {-# OVERLAPPABLE #-}
---    (ElemRemove a as newAs) =>
---    ElemRemove a (b ': as) (b ': newAs) where
---  unionRemove :: forall f. Union f (b ': as) -> Either (f a) (Union f (b ': newAs))
---  unionRemove (This b) = Right (This b)
---  unionRemove (That u) =
---    fmap That (unionRemove u :: Either (f a) (Union f newAs))
-
----- | Handle a single case on a 'Union'.  This is similar to 'union' but lets
----- you handle any case within the 'Union'.
-----
----- The type inference for this is pretty bad, so you must be liberal with
----- type signatures.
-----
----- This doesn't work for a 'Union' with two of the same types like
----- @'Union' f \'['Double', 'Double']@.
-----
----- ==== __Examples__
-----
----- Handling the first item in a 'Union'.
-----
----- >>> let u = This 3.5 :: Union Identity '[Double, Int]
----- >>> let printDouble = print :: Identity Double -> IO ()
----- >>> let printUnion = print :: Union Identity '[Int] -> IO ()
----- >>> unionHandle printUnion printDouble u
----- Identity 3.5
-----
----- Handling a middle item in a 'Union'.
-----
----- >>> let u2 = That (This 3.5) :: Union Identity '[Double, Double, Int]
----- >>> let printUnion = print :: Union Identity '[Double, Int] -> IO ()
----- >>> unionHandle printUnion printDouble u2
----- Identity 3.5
---unionHandle
---  :: ElemRemove a as newAs
---  => (Union f newAs -> b)
---  -> (f a -> b)
---  -> Union f as
---  -> b
---unionHandle unionHandler aHandler u =
---  either aHandler unionHandler $ unionRemove u
+-- | Handle a single case on a 'Union'.  This is similar to 'union' but lets
+-- you handle any case within the 'Union'.
+--
+-- ==== __Examples__
+--
+-- Handling the first item in a 'Union'.
+--
+-- >>> let u = This 3.5 :: Union Identity '[Double, Int]
+-- >>> let printDouble = print :: Identity Double -> IO ()
+-- >>> let printUnion = print :: Union Identity '[Int] -> IO ()
+-- >>> unionHandle printUnion printDouble u
+-- Identity 3.5
+--
+-- Handling a middle item in a 'Union'.
+--
+-- >>> let u2 = That (This 3.5) :: Union Identity '[Char, Double, Int]
+-- >>> let printUnion = print :: Union Identity '[Char, Int] -> IO ()
+-- >>> unionHandle printUnion printDouble u2
+-- Identity 3.5
+--
+-- If you have duplicates in your 'Union', they will both get handled with
+-- a single call to 'unionHandle'.
+--
+-- >>> let u3 = That (This 3.5) :: Union Identity '[Double, Double, Int]
+-- >>> let printUnion = print :: Union Identity '[Int] -> IO ()
+-- >>> unionHandle printUnion printDouble u3
+-- Identity 3.5
+--
+-- Use 'absurdUnion' to handle an empty 'Union'.
+--
+-- >>> let u4 = This 3.5 :: Union Identity '[Double]
+-- >>> unionHandle (absurdUnion :: Union Identity '[] -> IO ()) printDouble u4
+-- Identity 3.5
+unionHandle
+  :: ElemRemove a as
+  => (Union f (CalcFinalList a as) -> b)
+  -> (f a -> b)
+  -> Union f as
+  -> b
+unionHandle unionHandler aHandler u =
+  either aHandler unionHandler $ unionRemove u
 
 ---------------
 -- OpenUnion --
