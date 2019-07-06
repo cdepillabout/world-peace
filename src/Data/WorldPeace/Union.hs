@@ -381,8 +381,6 @@ instance
   unionPrism = _That . unionPrism
   {-# INLINE unionPrism #-}
 
-data Cases = CaseEmpty | CaseFirstSame | CaseFirstDiff
-
 -- | This type family removes a type from a type-level list.
 --
 -- This is used to compute the type of the returned 'Union' in 'unionRemove'.
@@ -471,6 +469,20 @@ type ElemRemove a as = ElemRemove' a as (RemoveCase a as)
 unionRemove :: forall a as f. ElemRemove a as => Union f as -> Either (Union f (Remove a as)) (f a)
 unionRemove = unionRemove' (Proxy @(RemoveCase a as))
 
+-- | This is used as a promoted data type to give a tag to the three different
+-- instances of 'ElemRemove\''.  These also correspond to the three different
+-- cases of 'Remove' and 'RemoveCase'.
+data Cases = CaseEmpty | CaseFirstSame | CaseFirstDiff
+
+-- | This is an internal typeclass used for removing elements from a 'Union'.
+--
+-- The most surprising thing about this is the last argument, @caseMatch@.
+-- This is used to stop GHC from seeing overlapping instances:
+--
+-- https://kseo.github.io/posts/2017-02-05-avoid-overlapping-instances-with-closed-type-families.html
+--
+-- Each of the instances of this correspond to one case in 'Remove' and
+-- 'RemoveCase'.
 class ElemRemove' (a :: k) (as :: [k]) (caseMatch :: Cases) where
   unionRemove' :: Proxy caseMatch -> Union f as -> Either (Union f (Remove a as)) (f a)
 
