@@ -384,78 +384,63 @@ class ElemRemove a as where
   unionRemove :: Union f as -> Either (Union f (Remove a as)) (f a)
 
 instance
-    ( caseMatch ~ RemoveCase a as
-    , ElemRemove' a as caseMatch
+    ( ElemRemove' a as (RemoveCase a as)
     ) =>
     ElemRemove a as where
   unionRemove :: Union f as -> Either (Union f (Remove a as)) (f a)
-  unionRemove = unionRemove' (Proxy @caseMatch)
+  unionRemove = unionRemove' (Proxy @(RemoveCase a as))
+  {-# INLINE unionRemove #-}
 
-class
-    ElemRemove' (a :: k) (as :: [k]) (caseMatch :: Cases) where
-  unionRemove' :: Proxy caseMatch -> Union f as -> Either (Union f (Remove a as)) (f a)
-
-instance ElemRemove' a '[a] 'CaseFirstSame where
-  unionRemove'
-    :: Proxy 'CaseFirstSame -> Union f '[a] -> Either (Union f '[]) (f a)
-  unionRemove' _ (This a) = Right a
-  unionRemove' _ (That u) = absurdUnion u
-
-instance
-    -- We know that @Remove a '[b]@ will just be @'[b]@, because the
-    -- 'RemoveCase' type family proves that @a@ and @b@ are different.
-    -- However, GHC doesn't realize this, so we have to specify it here as a
-    -- constraint.
-    (Remove a '[b] ~ '[b]) =>
-    ElemRemove' a '[b] 'CaseFirstDiff where
-  unionRemove'
-    :: Proxy 'CaseFirstDiff -> Union f '[b] -> Either (Union f (Remove a '[b])) (f a)
-  unionRemove' _ (This a) = Left (This a)
-  unionRemove' _ (That u) = absurdUnion u
-
-data Cases = CaseFirstSame | CaseFirstDiff
+data Cases = CaseEmpty | CaseFirstSame | CaseFirstDiff
 
 -- | TODO: Document this since it is a user-facing type family.
 type family Remove (a :: k) (as :: [k]) :: [k] where
-  Remove a '[a] = '[]
-  Remove a '[b] = '[b]
-  Remove a (a ': b ': bs) = Remove a (b ': bs)
-  Remove a (b ': c ': cs) = b ': Remove a (c ': cs)
+  Remove a '[] = '[]
+  Remove a (a ': xs) = Remove a xs
+  Remove a (b ': xs) = b ': Remove a xs
 
 type family RemoveCase (a :: k) (as :: [k]) :: Cases where
-  RemoveCase a (a ': bs) = 'CaseFirstSame
-  RemoveCase a (b ': bs) = 'CaseFirstDiff
+  RemoveCase a '[] = 'CaseEmpty
+  RemoveCase a (a ': xs) = 'CaseFirstSame
+  RemoveCase a (b ': xs) = 'CaseFirstDiff
+
+class ElemRemove' (a :: k) (as :: [k]) (caseMatch :: Cases) where
+  unionRemove' :: Proxy caseMatch -> Union f as -> Either (Union f (Remove a as)) (f a)
+
+instance ElemRemove' a '[] 'CaseEmpty where
+  unionRemove'
+    :: Proxy 'CaseEmpty -> Union f '[] -> Either (Union f '[]) (f a)
+  unionRemove' _ u = absurdUnion u
+  {-# INLINE unionRemove' #-}
 
 instance
-    ( caseMatch ~ RemoveCase a (b ': bs)
-    , ElemRemove' a (b ': bs) caseMatch
+    ( ElemRemove' a xs (RemoveCase a xs)
     ) =>
-    ElemRemove' a (a ': b ': bs) 'CaseFirstSame where
+    ElemRemove' a (a ': xs) 'CaseFirstSame where
   unionRemove'
     :: forall f
      . Proxy 'CaseFirstSame
-    -> Union f (a ': b ': bs)
-    -> Either (Union f (Remove a (b ': bs))) (f a)
+    -> Union f (a ': xs)
+    -> Either (Union f (Remove a xs)) (f a)
   unionRemove' _ (This a) = Right a
   unionRemove' _ (That u) =
-    case unionRemove' (Proxy @caseMatch) u :: Either (Union f (Remove a (b ': bs))) (f a) of
+    case unionRemove' (Proxy @(RemoveCase a xs)) u :: Either (Union f (Remove a xs)) (f a) of
       Right fa -> Right fa
       Left u2 -> Left u2
 
 instance
-    ( caseMatch ~ RemoveCase a (c ': cs)
-    , ElemRemove' a (c ': cs) caseMatch
-    , Remove a (b ': c ': cs) ~ (b ': Remove a (c ': cs))
+    ( ElemRemove' a xs (RemoveCase a xs)
+    , Remove a (b ': xs) ~ (b ': Remove a xs)
     ) =>
-    ElemRemove' a (b ': c ': cs) 'CaseFirstDiff where
+    ElemRemove' a (b ': xs) 'CaseFirstDiff where
   unionRemove'
     :: forall f
      . Proxy 'CaseFirstDiff
-    -> Union f (b ': c ': cs)
-    -> Either (Union f (b ': Remove a (c ': cs))) (f a)
+    -> Union f (b ': xs)
+    -> Either (Union f (b ': Remove a xs)) (f a)
   unionRemove' _ (This b) = Left (This b)
   unionRemove' _ (That u) =
-    case unionRemove' (Proxy @caseMatch) u :: Either (Union f (Remove a (c ': cs))) (f a) of
+    case unionRemove' (Proxy @(RemoveCase a xs)) u :: Either (Union f (Remove a xs)) (f a) of
       Right fa -> Right fa
       Left u2 -> Left (That u2)
 
