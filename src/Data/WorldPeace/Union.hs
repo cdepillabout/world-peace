@@ -380,17 +380,6 @@ instance
   unionPrism = _That . unionPrism
   {-# INLINE unionPrism #-}
 
-class ElemRemove a as where
-  unionRemove :: Union f as -> Either (Union f (Remove a as)) (f a)
-
-instance
-    ( ElemRemove' a as (RemoveCase a as)
-    ) =>
-    ElemRemove a as where
-  unionRemove :: Union f as -> Either (Union f (Remove a as)) (f a)
-  unionRemove = unionRemove' (Proxy @(RemoveCase a as))
-  {-# INLINE unionRemove #-}
-
 data Cases = CaseEmpty | CaseFirstSame | CaseFirstDiff
 
 -- | TODO: Document this since it is a user-facing type family.
@@ -403,6 +392,17 @@ type family RemoveCase (a :: k) (as :: [k]) :: Cases where
   RemoveCase a '[] = 'CaseEmpty
   RemoveCase a (a ': xs) = 'CaseFirstSame
   RemoveCase a (b ': xs) = 'CaseFirstDiff
+
+class ElemRemove a as where
+  unionRemove :: Union f as -> Either (Union f (Remove a as)) (f a)
+
+instance
+    ( ElemRemove' a as (RemoveCase a as)
+    ) =>
+    ElemRemove a as where
+  unionRemove :: Union f as -> Either (Union f (Remove a as)) (f a)
+  unionRemove = unionRemove' (Proxy @(RemoveCase a as))
+  {-# INLINE unionRemove #-}
 
 class ElemRemove' (a :: k) (as :: [k]) (caseMatch :: Cases) where
   unionRemove' :: Proxy caseMatch -> Union f as -> Either (Union f (Remove a as)) (f a)
