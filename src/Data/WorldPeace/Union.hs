@@ -750,13 +750,13 @@ relaxOpenUnion (That u) = relaxUnion u
 --
 -- Handling a type in an 'OpenUnion':
 --
--- >>> let u = openUnionLift "hello" :: OpenUnion '[String, Double]
+-- >>> let u = openUnionLift ("hello" :: String) :: OpenUnion '[String, Double]
 -- >>> openUnionRemove u :: Either (OpenUnion '[Double]) String
 -- Right "hello"
 --
 -- Failing to handle a type in an 'OpenUnion':
 --
--- >>> let u = openUnionLift 3.5 :: OpenUnion '[String, Double]
+-- >>> let u = openUnionLift (3.5 :: Double) :: OpenUnion '[String, Double]
 -- >>> openUnionRemove u :: Either (OpenUnion '[Double]) String
 -- Left (Identity 3.5)
 --
@@ -778,7 +778,7 @@ openUnionRemove = fmap runIdentity . unionRemove
 --
 -- ==== __Examples__
 --
--- Handling the first item in a 'OpenUnion':
+-- Handling the first item in an 'OpenUnion':
 --
 -- >>> let u = This 3.5 :: OpenUnion '[Double, Int]
 -- >>> let printDouble = print :: Double -> IO ()
@@ -786,7 +786,7 @@ openUnionRemove = fmap runIdentity . unionRemove
 -- >>> openUnionHandle printUnion printDouble u
 -- 3.5
 --
--- Handling a middle item in a 'OpenUnion':
+-- Handling a middle item in an 'OpenUnion':
 --
 -- >>> let u2 = openUnionLift (3.5 :: Double) :: OpenUnion '[Char, Double, Int]
 -- >>> let printUnion = print :: OpenUnion '[Char, Int] -> IO ()
@@ -802,7 +802,7 @@ openUnionRemove = fmap runIdentity . unionRemove
 -- Identity 'c'
 --
 -- If you have duplicates in your 'OpenUnion', they will both get handled with
--- a single call to 'unionHandle'.
+-- a single call to 'openUnionHandle'.
 --
 -- >>> let u3 = That (This 3.5) :: OpenUnion '[Double, Double, Int]
 -- >>> let printUnion = print :: OpenUnion '[Int] -> IO ()
