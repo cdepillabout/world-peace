@@ -443,6 +443,31 @@ type family RemoveCase (a :: k) (as :: [k]) :: Cases where
 -- is not exported.
 type ElemRemove a as = ElemRemove' a as (RemoveCase a as)
 
+-- | This function allows you to try to remove individual types from a 'Union'.
+--
+-- This can be used to handle only certain types in a 'Union', instead of
+-- having to handle all of them at the same time.
+--
+-- ==== __Examples__
+--
+-- Handling a type in a 'Union':
+--
+-- >>> let u = This (Identity "hello") :: Union Identity '[String, Double]
+-- >>> unionRemove u :: Either (Union Identity '[Double]) (Identity String)
+-- Right (Identity "hello")
+--
+-- Failing to handle a type in a 'Union':
+--
+-- >>> let u = That (This (Identity 3.5)) :: Union Identity '[String, Double]
+-- >>> unionRemove u :: Either (Union Identity '[Double]) (Identity String)
+-- Left (Identity 3.5)
+--
+-- Note that if you have a 'Union' with multiple of the same type, they will
+-- all be handled at the same time:
+--
+-- >>> let u = That (This (Identity 3.5)) :: Union Identity '[String, Double, Char, Double]
+-- >>> unionRemove u :: Either (Union Identity '[String, Char]) (Identity Double)
+-- Right (Identity 3.5)
 unionRemove :: forall a as f. ElemRemove a as => Union f as -> Either (Union f (Remove a as)) (f a)
 unionRemove = unionRemove' (Proxy @(RemoveCase a as))
 
