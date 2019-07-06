@@ -427,7 +427,14 @@ instance
 
 instance
     ( ElemRemove' a xs (RemoveCase a xs)
-    , Remove a (b ': xs) ~ (b ': Remove a xs)
+    , -- We need to specify this equality because GHC doesn't realize it will
+      -- always work out this way.  We know that in this instance, @a@ and @b@
+      -- will always be different (because of how the 'RemoveCase' type family
+      -- works and the fact that there is already another instance that handles
+      -- the case when @a@ and @b@ are the same type).
+      --
+      -- However, GHC doesn't realize this, so we have to specify it.
+      Remove a (b ': xs) ~ (b ': Remove a xs)
     ) =>
     ElemRemove' a (b ': xs) 'CaseFirstDiff where
   unionRemove'
