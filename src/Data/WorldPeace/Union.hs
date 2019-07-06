@@ -424,6 +424,23 @@ type family RemoveCase (a :: k) (as :: [k]) :: Cases where
   RemoveCase a (a ': xs) = 'CaseFirstSame
   RemoveCase a (b ': xs) = 'CaseFirstDiff
 
+-- | This type alias is a 'Constraint' that is used when working with
+-- functions like 'unionRemove' or 'unionHandle'.
+--
+-- 'ElemRemove' gives you a way to specific types from a 'Union'.
+--
+-- Note that @'ElemRemove' a as@ doesn't force @a@ to be in @as@.  We are able
+-- to try to pull out a 'Double' from a @'Union' 'Identity' \'['Double']@:
+--
+-- >>> let u = This (Identity 3.5) :: Union Identity '[Double]
+-- >>> unionRemove u :: Either (Union Identity '[Double]) (Identity String)
+-- Left (Identity 3.5)
+--
+-- When writing your own functions using 'unionRemove', in order to make sure
+-- the @a@ is in @as@, you should combine 'ElemRemove' with 'IsMember'.
+--
+-- 'ElemRemove' uses some tricks to work correctly, so the underlying 'ElemRemove\''typeclass
+-- is not exported.
 type ElemRemove a as = ElemRemove' a as (RemoveCase a as)
 
 unionRemove :: forall a as f. ElemRemove a as => Union f as -> Either (Union f (Remove a as)) (f a)
