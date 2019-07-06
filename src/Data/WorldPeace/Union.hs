@@ -405,6 +405,19 @@ type family Remove (a :: k) (as :: [k]) :: [k] where
   Remove a (a ': xs) = Remove a xs
   Remove a (b ': xs) = b ': Remove a xs
 
+-- | This is used internally to figure out which instance to pick for the
+-- 'ElemRemove\'' type class.
+--
+-- This is needed to work around overlapping instances.
+--
+-- >>> Refl :: RemoveCase Double '[Double, String] :~: 'CaseFirstSame
+-- Refl
+--
+-- >>> Refl :: RemoveCase Double '[Char, Double, Double] :~: 'CaseFirstDiff
+-- Refl
+--
+-- >>> Refl :: RemoveCase Double '[] :~: 'CaseEmpty
+-- Refl
 type family RemoveCase (a :: k) (as :: [k]) :: Cases where
   RemoveCase a '[] = 'CaseEmpty
   RemoveCase a (a ': xs) = 'CaseFirstSame
