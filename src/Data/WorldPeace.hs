@@ -49,6 +49,8 @@ module Data.WorldPeace
   , openUnionMatch
   , catchesOpenUnion
   , relaxOpenUnion
+  , openUnionRemove
+  , openUnionHandle
   , IsMember
   , Contains
   -- ** 'Union' (used by 'OpenUnion')

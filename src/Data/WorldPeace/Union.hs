@@ -57,7 +57,6 @@ module Data.WorldPeace.Union
   , Contains
   , Remove
   , ElemRemove
-  -- , ElemRemove(..)
   -- * OpenUnion
   , OpenUnion
   , openUnion
@@ -68,6 +67,8 @@ module Data.WorldPeace.Union
   , openUnionMatch
   , catchesOpenUnion
   , relaxOpenUnion
+  , openUnionRemove
+  , openUnionHandle
   -- * Setup code for doctests
   -- $setup
   ) where
@@ -466,7 +467,11 @@ type ElemRemove a as = ElemRemove' a as (RemoveCase a as)
 -- >>> let u = That (This (Identity 3.5)) :: Union Identity '[String, Double, Char, Double]
 -- >>> unionRemove u :: Either (Union Identity '[String, Char]) (Identity Double)
 -- Right (Identity 3.5)
-unionRemove :: forall a as f. ElemRemove a as => Union f as -> Either (Union f (Remove a as)) (f a)
+unionRemove
+  :: forall a as f
+   . ElemRemove a as
+  => Union f as
+  -> Either (Union f (Remove a as)) (f a)
 unionRemove = unionRemove' (Proxy @(RemoveCase a as))
 
 -- | This is used as a promoted data type to give a tag to the three different
@@ -720,12 +725,28 @@ catchesOpenUnion tuple u =
 
 -- | Just like 'relaxUnion' but for 'OpenUnion'.
 --
--- >>> let u = openUnionLift 3.5 :: Union Identity '[Double, String]
+-- >>> let u = openUnionLift (3.5 :: Double) :: Union Identity '[Double, String]
 -- >>> relaxOpenUnion u :: Union Identity '[Char, Double, Int, String, Float]
 -- Identity 3.5
 relaxOpenUnion :: Contains as bs => OpenUnion as -> OpenUnion bs
 relaxOpenUnion (This as) = unionLift as
 relaxOpenUnion (That u) = relaxUnion u
+
+openUnionRemove
+  :: forall a as
+   . ElemRemove a as
+  => OpenUnion as
+  -> Either (OpenUnion (Remove a as)) a
+openUnionRemove = fmap runIdentity . unionRemove' (Proxy @(RemoveCase a as))
+
+openUnionHandle
+  :: ElemRemove a as
+  => (OpenUnion (Remove a as) -> b)
+  -> (a -> b)
+  -> OpenUnion as
+  -> b
+openUnionHandle unionHandler aHandler =
+  unionHandle unionHandler (aHandler . runIdentity)
 
 ---------------
 -- Instances --
