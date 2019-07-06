@@ -30,54 +30,54 @@ unionRemoveTests =
     "unionRemove"
     [ testCase "match final element" $ do
         let u = This (Identity "hello") :: Union Identity '[String]
-            removed = unionRemove u :: Either (Identity String) (Union Identity '[])
-        removed @?= Left (Identity "hello")
+            removed = unionRemove u :: Either (Union Identity '[]) (Identity String)
+        removed @?= Right (Identity "hello")
     , testCase "fail to match final element" $ do
         let u = This (Identity "hello") :: Union Identity '[String]
-            removed = unionRemove u :: Either (Identity Double) (Union Identity '[String])
-        removed @?= Right u
+            removed = unionRemove u :: Either (Union Identity '[String]) (Identity Double)
+        removed @?= Left u
     , testCase "match leading non-final element" $ do
         let u = This (Identity "hello") :: Union Identity '[String, Double]
-            removed = unionRemove u :: Either (Identity String) (Union Identity '[Double])
-        removed @?= Left (Identity "hello")
+            removed = unionRemove u :: Either (Union Identity '[Double]) (Identity String)
+        removed @?= Right (Identity "hello")
     , testCase "fail match leading non-final element" $ do
         let u = That (This (Identity 3.5)) :: Union Identity '[String, Double]
-            removed = unionRemove u :: Either (Identity String) (Union Identity '[Double])
-        removed @?= Right (This (Identity 3.5))
+            removed = unionRemove u :: Either (Union Identity '[Double]) (Identity String)
+        removed @?= Left (This (Identity 3.5))
     , testCase "match non-leading non-final element" $ do
         let u = That (This (Identity "hello")) :: Union Identity '[Char, String, Double]
-            removed = unionRemove u :: Either (Identity String) (Union Identity '[Char, Double])
-        removed @?= Left (Identity "hello")
+            removed = unionRemove u :: Either (Union Identity '[Char, Double]) (Identity String)
+        removed @?= Right (Identity "hello")
     , testCase "fail match non-leading non-final element 1" $ do
         let u = That (That (This (Identity 3.5))) :: Union Identity '[Char, String, Double]
-            removed = unionRemove u :: Either (Identity String) (Union Identity '[Char, Double])
-        removed @?= Right (That (This (Identity 3.5)))
+            removed = unionRemove u :: Either (Union Identity '[Char, Double]) (Identity String)
+        removed @?= Left (That (This (Identity 3.5)))
     , testCase "fail match non-leading non-final element 2" $ do
         let u = This (Identity 'c') :: Union Identity '[Char, String, Double]
-            removed = unionRemove u :: Either (Identity String) (Union Identity '[Char, Double])
-        removed @?= Right (This (Identity 'c'))
+            removed = unionRemove u :: Either (Union Identity '[Char, Double]) (Identity String)
+        removed @?= Left (This (Identity 'c'))
     , testCase "fail match non-existing element" $ do
         let u = This (Identity 'c') :: Union Identity '[Char, String, Double]
-            removed = unionRemove u :: Either (Identity Float) (Union Identity '[Char, String, Double])
-        removed @?= Right u
+            removed = unionRemove u :: Either (Union Identity '[Char, String, Double]) (Identity Float)
+        removed @?= Left u
     , testCase "match multiple 1" $ do
         let u = This (Identity 'c') :: Union Identity '[Char, Char]
-            removed = unionRemove u :: Either (Identity Char) (Union Identity '[])
-        removed @?= Left (Identity 'c')
+            removed = unionRemove u :: Either (Union Identity '[]) (Identity Char)
+        removed @?= Right (Identity 'c')
     , testCase "match multiple 2" $ do
         let u = That (This (Identity 'c')) :: Union Identity '[Char, Char]
-            removed = unionRemove u :: Either (Identity Char) (Union Identity '[])
-        removed @?= Left (Identity 'c')
+            removed = unionRemove u :: Either (Union Identity '[]) (Identity Char)
+        removed @?= Right (Identity 'c')
     , testCase "match multiple 3" $ do
         let u = That (This (Identity 'c')) :: Union Identity '[Double, Char, String, Char, Float]
-            removed = unionRemove u :: Either (Identity Char) (Union Identity '[Double, String, Float])
-        removed @?= Left (Identity 'c')
+            removed = unionRemove u :: Either (Union Identity '[Double, String, Float]) (Identity Char)
+        removed @?= Right (Identity 'c')
     , testCase "fail to match multiple 1" $ do
         let u = That (That (This (Identity 3.5))) :: Union Identity '[Char, Char, Double]
-            removed = unionRemove u :: Either (Identity Char) (Union Identity '[Double])
-        removed @?= Right (This (Identity 3.5))
+            removed = unionRemove u :: Either (Union Identity '[Double]) (Identity Char)
+        removed @?= Left (This (Identity 3.5))
     , testCase "fail to match multiple 2" $ do
         let u = That (That (This (Identity 3.5))) :: Union Identity '[String, Char, Float, Char, Double]
-            removed = unionRemove u :: Either (Identity Char) (Union Identity '[String, Float, Double])
-        removed @?= Right (That (This (Identity 3.5)))
+            removed = unionRemove u :: Either (Union Identity '[String, Float, Double]) (Identity Char)
+        removed @?= Left (That (This (Identity 3.5)))
     ]

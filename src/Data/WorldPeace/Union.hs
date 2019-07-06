@@ -381,7 +381,7 @@ instance
   {-# INLINE unionPrism #-}
 
 class ElemRemove a as where
-  unionRemove :: Union f as -> Either (f a) (Union f (Remove a as))
+  unionRemove :: Union f as -> Either (Union f (Remove a as)) (f a)
 
 instance
     ( caseMatch ~ RemoveCase a as
@@ -389,23 +389,23 @@ instance
     , ElemRemove' a as newList caseMatch
     ) =>
     ElemRemove a as where
-  unionRemove :: Union f as -> Either (f a) (Union f newList)
+  unionRemove :: Union f as -> Either (Union f newList) (f a)
   unionRemove = unionRemove' (Proxy @caseMatch)
 
 class
     ElemRemove' (a :: k) (as :: [k]) (newAs :: [k]) (caseMatch :: Cases) where
-  unionRemove' :: Proxy caseMatch -> Union f as -> Either (f a) (Union f newAs)
+  unionRemove' :: Proxy caseMatch -> Union f as -> Either (Union f newAs) (f a)
 
 instance ElemRemove' a '[a] '[] 'CaseLastSame where
   unionRemove'
-    :: Proxy 'CaseLastSame -> Union f '[a] -> Either (f a) (Union f '[])
-  unionRemove' _ (This a) = Left a
+    :: Proxy 'CaseLastSame -> Union f '[a] -> Either (Union f '[]) (f a)
+  unionRemove' _ (This a) = Right a
   unionRemove' _ (That u) = absurdUnion u
 
 instance ElemRemove' a '[b] '[b] 'CaseLastDiff where
   unionRemove'
-    :: Proxy 'CaseLastDiff -> Union f '[b] -> Either (f a) (Union f '[b])
-  unionRemove' _ (This a) = Right (This a)
+    :: Proxy 'CaseLastDiff -> Union f '[b] -> Either (Union f '[b]) (f a)
+  unionRemove' _ (This a) = Left (This a)
   unionRemove' _ (That u) = absurdUnion u
 
 data Cases = CaseLastSame | CaseLastDiff | CaseRecursiveSame | CaseRecursiveDiff
@@ -433,12 +433,12 @@ instance
     :: forall f
      . Proxy 'CaseRecursiveSame
     -> Union f (a ': b ': bs)
-    -> Either (f a) (Union f finalList)
-  unionRemove' _ (This a) = Left a
+    -> Either (Union f finalList) (f a)
+  unionRemove' _ (This a) = Right a
   unionRemove' _ (That u) =
-    case unionRemove' (Proxy @caseMatch) u :: Either (f a) (Union f finalList) of
-      Left fa -> Left fa
-      Right u2 -> Right u2
+    case unionRemove' (Proxy @caseMatch) u :: Either (Union f finalList) (f a) of
+      Right fa -> Right fa
+      Left u2 -> Left u2
 
 instance
     ( finalList ~ (b ': Remove a (c ': cs))
@@ -450,12 +450,12 @@ instance
     :: forall f
      . Proxy 'CaseRecursiveDiff
     -> Union f (b ': c ': cs)
-    -> Either (f a) (Union f finalList)
-  unionRemove' _ (This b) = Right (This b)
+    -> Either (Union f finalList) (f a)
+  unionRemove' _ (This b) = Left (This b)
   unionRemove' _ (That u) =
-    case unionRemove' (Proxy @caseMatch) u :: Either (f a) (Union f (Remove a (c ': cs))) of
-      Left fa -> Left fa
-      Right u2 -> Right (That u2)
+    case unionRemove' (Proxy @caseMatch) u :: Either (Union f (Remove a (c ': cs))) (f a) of
+      Right fa -> Right fa
+      Left u2 -> Left (That u2)
 
 -- | Handle a single case on a 'Union'.  This is similar to 'union' but lets
 -- you handle any case within the 'Union'.
@@ -497,7 +497,7 @@ unionHandle
   -> Union f as
   -> b
 unionHandle unionHandler aHandler u =
-  either aHandler unionHandler $ unionRemove u
+  either unionHandler aHandler $ unionRemove u
 
 ---------------
 -- OpenUnion --
