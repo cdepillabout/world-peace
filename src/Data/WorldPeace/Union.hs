@@ -479,6 +479,7 @@ unionRemove
   => Union f as
   -> Either (Union f (Remove a as)) (f a)
 unionRemove = unionRemove' (Proxy @(RemoveCase a as))
+{-# INLINE unionRemove #-}
 
 -- | This is used as a promoted data type to give a tag to the three different
 -- instances of 'ElemRemove\''.  These also correspond to the three different
@@ -738,13 +739,81 @@ relaxOpenUnion :: Contains as bs => OpenUnion as -> OpenUnion bs
 relaxOpenUnion (This as) = unionLift as
 relaxOpenUnion (That u) = relaxUnion u
 
+-- | This function allows you to try to remove individual types from an
+-- 'OpenUnion'.
+--
+-- This can be used to handle only certain types in an 'OpenUnion', instead of
+-- having to handle all of them at the same time.  This can be more convenient
+-- than a function like 'catchesOpenUnion'.
+--
+-- ==== __Examples__
+--
+-- Handling a type in an 'OpenUnion':
+--
+-- >>> let u = openUnionLift "hello" :: OpenUnion '[String, Double]
+-- >>> openUnionRemove u :: Either (OpenUnion '[Double]) String
+-- Right "hello"
+--
+-- Failing to handle a type in an 'OpenUnion':
+--
+-- >>> let u = openUnionLift 3.5 :: OpenUnion '[String, Double]
+-- >>> openUnionRemove u :: Either (OpenUnion '[Double]) String
+-- Left (Identity 3.5)
+--
+-- Note that if you have an 'OpenUnion' with multiple of the same type, they will
+-- all be handled at the same time:
+--
+-- >>> let u = That (This (Identity 3.5)) :: OpenUnion '[String, Double, Char, Double]
+-- >>> openUnionRemove u :: Either (OpenUnion '[String, Char]) Double
+-- Right 3.5
 openUnionRemove
   :: forall a as
    . ElemRemove a as
   => OpenUnion as
   -> Either (OpenUnion (Remove a as)) a
-openUnionRemove = fmap runIdentity . unionRemove' (Proxy @(RemoveCase a as))
+openUnionRemove = fmap runIdentity . unionRemove
 
+-- | Handle a single case in an 'OpenUnion'.  This is similar to 'openUnion'
+-- but lets you handle any case within the 'OpenUnion', not just the first one.
+--
+-- ==== __Examples__
+--
+-- Handling the first item in a 'OpenUnion':
+--
+-- >>> let u = This 3.5 :: OpenUnion '[Double, Int]
+-- >>> let printDouble = print :: Double -> IO ()
+-- >>> let printUnion = print :: OpenUnion '[Int] -> IO ()
+-- >>> openUnionHandle printUnion printDouble u
+-- 3.5
+--
+-- Handling a middle item in a 'OpenUnion':
+--
+-- >>> let u2 = openUnionLift (3.5 :: Double) :: OpenUnion '[Char, Double, Int]
+-- >>> let printUnion = print :: OpenUnion '[Char, Int] -> IO ()
+-- >>> openUnionHandle printUnion printDouble u2
+-- 3.5
+--
+-- Failing to handle an item in an 'OpenUnion'.  In the following example, the
+-- @printUnion@ function is called:
+--
+-- >>> let u2 = openUnionLift 'c' :: OpenUnion '[Char, Double, Int]
+-- >>> let printUnion = print :: OpenUnion '[Char, Int] -> IO ()
+-- >>> openUnionHandle printUnion printDouble u2
+-- Identity 'c'
+--
+-- If you have duplicates in your 'OpenUnion', they will both get handled with
+-- a single call to 'unionHandle'.
+--
+-- >>> let u3 = That (This 3.5) :: OpenUnion '[Double, Double, Int]
+-- >>> let printUnion = print :: OpenUnion '[Int] -> IO ()
+-- >>> openUnionHandle printUnion printDouble u3
+-- 3.5
+--
+-- Use 'absurdOpenUnion' to handle an empty 'OpenUnion':
+--
+-- >>> let u4 = This 3.5 :: OpenUnion '[Double]
+-- >>> openUnionHandle (absurdUnion :: OpenUnion '[] -> IO ()) printDouble u4
+-- 3.5
 openUnionHandle
   :: ElemRemove a as
   => (OpenUnion (Remove a as) -> b)
@@ -878,7 +947,3 @@ instance (FromJSON (f a), FromJSON (Union f as)) => FromJSON (Union f (a ': as))
 --       where
 --         matchR = This . Identity <$> fromException sE
 --         matchL = That <$> fromException sE
-
-
-
-
