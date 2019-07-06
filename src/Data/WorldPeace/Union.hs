@@ -286,6 +286,12 @@ catchesUnion tuple u = catchesUnionProduct (tupleToProduct tuple) u
 -- >>> let u = This (Identity 3.5) :: Union Identity '[Double, String]
 -- >>> relaxUnion u :: Union Identity '[Char, Double, Int, String, Float]
 -- Identity 3.5
+--
+-- The original types can be in a different order in the result 'Union':
+--
+-- >>> let u = That (This (Identity 3.5)) :: Union Identity '[String, Double]
+-- >>> relaxUnion u :: Union Identity '[Char, Double, Int, String, Float]
+-- Identity 3.5
 relaxUnion :: Contains as bs => Union f as -> Union f bs
 relaxUnion (This as) = unionLift as
 relaxUnion (That u) = relaxUnion u
