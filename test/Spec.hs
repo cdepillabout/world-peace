@@ -80,4 +80,10 @@ unionRemoveTests =
         let u = That (That (This (Identity 3.5))) :: Union Identity '[String, Char, Float, Char, Double]
             removed = unionRemove u :: Either (Union Identity '[String, Float, Double]) (Identity Char)
         removed @?= Left (That (This (Identity 3.5)))
+    , testCase "type inference works somewhat 1" $ do
+        let u = This (Identity 3.5) :: Union Identity '[Double, Char, Int]
+        unionRemove u @?= Right (Identity (3.5 :: Double))
+    , testCase "type inference works somewhat 2" $ do
+        let u = That (This (Identity 'c')) :: Union Identity '[Double, Char, Int]
+        unionRemove u @?= Right (Identity ('c'))
     ]

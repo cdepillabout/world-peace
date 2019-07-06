@@ -396,19 +396,19 @@ class
     ElemRemove' (a :: k) (as :: [k]) (newAs :: [k]) (caseMatch :: Cases) where
   unionRemove' :: Proxy caseMatch -> Union f as -> Either (Union f newAs) (f a)
 
-instance ElemRemove' a '[a] '[] 'CaseLastSame where
+instance ElemRemove' a '[a] '[] 'CaseFirstSame where
   unionRemove'
-    :: Proxy 'CaseLastSame -> Union f '[a] -> Either (Union f '[]) (f a)
+    :: Proxy 'CaseFirstSame -> Union f '[a] -> Either (Union f '[]) (f a)
   unionRemove' _ (This a) = Right a
   unionRemove' _ (That u) = absurdUnion u
 
-instance ElemRemove' a '[b] '[b] 'CaseLastDiff where
+instance ElemRemove' a '[b] '[b] 'CaseFirstDiff where
   unionRemove'
-    :: Proxy 'CaseLastDiff -> Union f '[b] -> Either (Union f '[b]) (f a)
+    :: Proxy 'CaseFirstDiff -> Union f '[b] -> Either (Union f '[b]) (f a)
   unionRemove' _ (This a) = Left (This a)
   unionRemove' _ (That u) = absurdUnion u
 
-data Cases = CaseLastSame | CaseLastDiff | CaseRecursiveSame | CaseRecursiveDiff
+data Cases = CaseFirstSame | CaseFirstDiff
 
 -- | TODO: Document this since it is a user-facing type family.
 type family Remove (a :: k) (as :: [k]) :: [k] where
@@ -418,20 +418,20 @@ type family Remove (a :: k) (as :: [k]) :: [k] where
   Remove a (b ': c ': cs) = b ': Remove a (c ': cs)
 
 type family RemoveCase (a :: k) (as :: [k]) :: Cases where
-  RemoveCase a '[a] = 'CaseLastSame
-  RemoveCase a '[b] = 'CaseLastDiff
-  RemoveCase a (a ': bs) = 'CaseRecursiveSame
-  RemoveCase a (b ': bs) = 'CaseRecursiveDiff
+  RemoveCase a '[a] = 'CaseFirstSame
+  RemoveCase a '[b] = 'CaseFirstDiff
+  RemoveCase a (a ': bs) = 'CaseFirstSame
+  RemoveCase a (b ': bs) = 'CaseFirstDiff
 
 instance
     ( finalList ~ Remove a (b ': bs)
     , caseMatch ~ RemoveCase a (b ': bs)
     , ElemRemove' a (b ': bs) finalList caseMatch
     ) =>
-    ElemRemove' a (a ': b ': bs) finalList 'CaseRecursiveSame where
+    ElemRemove' a (a ': b ': bs) finalList 'CaseFirstSame where
   unionRemove'
     :: forall f
-     . Proxy 'CaseRecursiveSame
+     . Proxy 'CaseFirstSame
     -> Union f (a ': b ': bs)
     -> Either (Union f finalList) (f a)
   unionRemove' _ (This a) = Right a
@@ -445,10 +445,10 @@ instance
     , caseMatch ~ RemoveCase a (c ': cs)
     , ElemRemove' a (c ': cs) (Remove a (c ': cs)) caseMatch
     ) =>
-    ElemRemove' a (b ': c ': cs) finalList 'CaseRecursiveDiff where
+    ElemRemove' a (b ': c ': cs) finalList 'CaseFirstDiff where
   unionRemove'
     :: forall f
-     . Proxy 'CaseRecursiveDiff
+     . Proxy 'CaseFirstDiff
     -> Union f (b ': c ': cs)
     -> Either (Union f finalList) (f a)
   unionRemove' _ (This b) = Left (This b)
