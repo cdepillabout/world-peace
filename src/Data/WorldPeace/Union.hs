@@ -385,26 +385,31 @@ class ElemRemove a as where
 
 instance
     ( caseMatch ~ RemoveCase a as
-    , newList ~ Remove a as
-    , ElemRemove' a as newList caseMatch
+    , ElemRemove' a as caseMatch
     ) =>
     ElemRemove a as where
-  unionRemove :: Union f as -> Either (Union f newList) (f a)
+  unionRemove :: Union f as -> Either (Union f (Remove a as)) (f a)
   unionRemove = unionRemove' (Proxy @caseMatch)
 
 class
-    ElemRemove' (a :: k) (as :: [k]) (newAs :: [k]) (caseMatch :: Cases) where
-  unionRemove' :: Proxy caseMatch -> Union f as -> Either (Union f newAs) (f a)
+    ElemRemove' (a :: k) (as :: [k]) (caseMatch :: Cases) where
+  unionRemove' :: Proxy caseMatch -> Union f as -> Either (Union f (Remove a as)) (f a)
 
-instance ElemRemove' a '[a] '[] 'CaseFirstSame where
+instance ElemRemove' a '[a] 'CaseFirstSame where
   unionRemove'
     :: Proxy 'CaseFirstSame -> Union f '[a] -> Either (Union f '[]) (f a)
   unionRemove' _ (This a) = Right a
   unionRemove' _ (That u) = absurdUnion u
 
-instance ElemRemove' a '[b] '[b] 'CaseFirstDiff where
+instance
+    -- We know that @Remove a '[b]@ will just be @'[b]@, because the
+    -- 'RemoveCase' type family proves that @a@ and @b@ are different.
+    -- However, GHC doesn't realize this, so we have to specify it here as a
+    -- constraint.
+    (Remove a '[b] ~ '[b]) =>
+    ElemRemove' a '[b] 'CaseFirstDiff where
   unionRemove'
-    :: Proxy 'CaseFirstDiff -> Union f '[b] -> Either (Union f '[b]) (f a)
+    :: Proxy 'CaseFirstDiff -> Union f '[b] -> Either (Union f (Remove a '[b])) (f a)
   unionRemove' _ (This a) = Left (This a)
   unionRemove' _ (That u) = absurdUnion u
 
@@ -422,33 +427,32 @@ type family RemoveCase (a :: k) (as :: [k]) :: Cases where
   RemoveCase a (b ': bs) = 'CaseFirstDiff
 
 instance
-    ( finalList ~ Remove a (b ': bs)
-    , caseMatch ~ RemoveCase a (b ': bs)
-    , ElemRemove' a (b ': bs) finalList caseMatch
+    ( caseMatch ~ RemoveCase a (b ': bs)
+    , ElemRemove' a (b ': bs) caseMatch
     ) =>
-    ElemRemove' a (a ': b ': bs) finalList 'CaseFirstSame where
+    ElemRemove' a (a ': b ': bs) 'CaseFirstSame where
   unionRemove'
     :: forall f
      . Proxy 'CaseFirstSame
     -> Union f (a ': b ': bs)
-    -> Either (Union f finalList) (f a)
+    -> Either (Union f (Remove a (b ': bs))) (f a)
   unionRemove' _ (This a) = Right a
   unionRemove' _ (That u) =
-    case unionRemove' (Proxy @caseMatch) u :: Either (Union f finalList) (f a) of
+    case unionRemove' (Proxy @caseMatch) u :: Either (Union f (Remove a (b ': bs))) (f a) of
       Right fa -> Right fa
       Left u2 -> Left u2
 
 instance
-    ( finalList ~ (b ': Remove a (c ': cs))
-    , caseMatch ~ RemoveCase a (c ': cs)
-    , ElemRemove' a (c ': cs) (Remove a (c ': cs)) caseMatch
+    ( caseMatch ~ RemoveCase a (c ': cs)
+    , ElemRemove' a (c ': cs) caseMatch
+    , Remove a (b ': c ': cs) ~ (b ': Remove a (c ': cs))
     ) =>
-    ElemRemove' a (b ': c ': cs) finalList 'CaseFirstDiff where
+    ElemRemove' a (b ': c ': cs) 'CaseFirstDiff where
   unionRemove'
     :: forall f
      . Proxy 'CaseFirstDiff
     -> Union f (b ': c ': cs)
-    -> Either (Union f finalList) (f a)
+    -> Either (Union f (b ': Remove a (c ': cs))) (f a)
   unionRemove' _ (This b) = Left (This b)
   unionRemove' _ (That u) =
     case unionRemove' (Proxy @caseMatch) u :: Either (Union f (Remove a (c ': cs))) (f a) of
