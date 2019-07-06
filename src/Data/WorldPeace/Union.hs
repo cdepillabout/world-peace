@@ -43,6 +43,7 @@ module Data.WorldPeace.Union
   , absurdUnion
   , umap
   , relaxUnion
+  , unionRemove
   , unionHandle
   -- ** Optics
   , _This
@@ -54,8 +55,8 @@ module Data.WorldPeace.Union
   , UElem(..)
   , IsMember
   , Contains
-  , ElemRemove(..)
   , Remove
+  , ElemRemove
   -- , ElemRemove(..)
   -- * OpenUnion
   , OpenUnion
@@ -423,16 +424,10 @@ type family RemoveCase (a :: k) (as :: [k]) :: Cases where
   RemoveCase a (a ': xs) = 'CaseFirstSame
   RemoveCase a (b ': xs) = 'CaseFirstDiff
 
-class ElemRemove a as where
-  unionRemove :: Union f as -> Either (Union f (Remove a as)) (f a)
+type ElemRemove a as = ElemRemove' a as (RemoveCase a as)
 
-instance
-    ( ElemRemove' a as (RemoveCase a as)
-    ) =>
-    ElemRemove a as where
-  unionRemove :: Union f as -> Either (Union f (Remove a as)) (f a)
-  unionRemove = unionRemove' (Proxy @(RemoveCase a as))
-  {-# INLINE unionRemove #-}
+unionRemove :: forall a as f. ElemRemove a as => Union f as -> Either (Union f (Remove a as)) (f a)
+unionRemove = unionRemove' (Proxy @(RemoveCase a as))
 
 class ElemRemove' (a :: k) (as :: [k]) (caseMatch :: Cases) where
   unionRemove' :: Proxy caseMatch -> Union f as -> Either (Union f (Remove a as)) (f a)
