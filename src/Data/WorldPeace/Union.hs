@@ -410,6 +410,7 @@ instance ElemRemove' a '[b] '[b] 'CaseLastDiff where
 
 data Cases = CaseLastSame | CaseLastDiff | CaseRecursiveSame | CaseRecursiveDiff
 
+-- | TODO: Document this since it is a user-facing type family.
 type family Remove (a :: k) (as :: [k]) :: [k] where
   Remove a '[a] = '[]
   Remove a '[b] = '[b]
