@@ -418,8 +418,6 @@ type family Remove (a :: k) (as :: [k]) :: [k] where
   Remove a (b ': c ': cs) = b ': Remove a (c ': cs)
 
 type family RemoveCase (a :: k) (as :: [k]) :: Cases where
-  RemoveCase a '[a] = 'CaseFirstSame
-  RemoveCase a '[b] = 'CaseFirstDiff
   RemoveCase a (a ': bs) = 'CaseFirstSame
   RemoveCase a (b ': bs) = 'CaseFirstDiff
 
