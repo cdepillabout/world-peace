@@ -42,6 +42,19 @@ test-suite world-peace-doctest
   default-language:    Haskell2010
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
 
+test-suite world-peace-test
+  type:                exitcode-stdio-1.0
+  main-is:             Spec.hs
+  other-modules:       Test.TypeErrors
+  hs-source-dirs:      test
+  build-depends:       base
+                     , tasty
+                     , tasty-hunit
+                     , should-not-typecheck
+                     , world-peace
+  default-language:    Haskell2010
+  ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fwarn-monomorphism-restriction
+
 source-repository head
   type:     git
   location: git@github.com:cdepillabout/world-peace.git

@@ -61,10 +61,13 @@ module Data.WorldPeace
   , umap
   , catchesUnion
   , relaxUnion
+  , unionHandle
   -- *** Union optics
   , _This
   , _That
   -- *** Typeclasses used with Union
+  , ElemRemove(..)
+  , Remove
   , Nat(Z, S)
   , RIndex
   , UElem(..)
