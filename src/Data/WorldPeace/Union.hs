@@ -423,10 +423,7 @@ instance
     -> Union f (a ': xs)
     -> Either (Union f (Remove a xs)) (f a)
   unionRemove' _ (This a) = Right a
-  unionRemove' _ (That u) =
-    case unionRemove' (Proxy @(RemoveCase a xs)) u :: Either (Union f (Remove a xs)) (f a) of
-      Right fa -> Right fa
-      Left u2 -> Left u2
+  unionRemove' _ (That u) = unionRemove' (Proxy @(RemoveCase a xs)) u
 
 instance
     ( ElemRemove' a xs (RemoveCase a xs)
@@ -440,7 +437,7 @@ instance
     -> Either (Union f (b ': Remove a xs)) (f a)
   unionRemove' _ (This b) = Left (This b)
   unionRemove' _ (That u) =
-    case unionRemove' (Proxy @(RemoveCase a xs)) u :: Either (Union f (Remove a xs)) (f a) of
+    case unionRemove' (Proxy @(RemoveCase a xs)) u of
       Right fa -> Right fa
       Left u2 -> Left (That u2)
 
