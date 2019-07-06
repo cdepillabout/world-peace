@@ -382,7 +382,24 @@ instance
 
 data Cases = CaseEmpty | CaseFirstSame | CaseFirstDiff
 
--- | TODO: Document this since it is a user-facing type family.
+-- | This type family removes a type from a type-level list.
+--
+-- This is used to compute the type of the returned 'Union' in 'unionRemove'.
+--
+-- ==== __Examples__
+--
+-- >>> Refl :: Remove Double '[Double, String] :~: '[String]
+-- Refl
+--
+-- If the list contains multiple of the type, then they are all removed.
+--
+-- >>> Refl :: Remove Double '[Char, Double, String, Double] :~: '[Char, String]
+-- Refl
+--
+-- If the list is empty, then nothing is removed.
+--
+-- >>> Refl :: Remove Double '[] :~: '[]
+-- Refl
 type family Remove (a :: k) (as :: [k]) :: [k] where
   Remove a '[] = '[]
   Remove a (a ': xs) = Remove a xs
@@ -428,7 +445,7 @@ instance
 instance
     ( ElemRemove' a xs (RemoveCase a xs)
     , -- We need to specify this equality because GHC doesn't realize it will
-      -- always work out this way.  We know that in this instance, @a@ and @b@
+      -- always work out this way.  We know that for this case, @a@ and @b@
       -- will always be different (because of how the 'RemoveCase' type family
       -- works and the fact that there is already another instance that handles
       -- the case when @a@ and @b@ are the same type).
