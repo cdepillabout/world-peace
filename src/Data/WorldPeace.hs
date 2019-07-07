@@ -48,7 +48,11 @@ module Data.WorldPeace
   , openUnionLift
   , openUnionMatch
   , catchesOpenUnion
+  , relaxOpenUnion
+  , openUnionRemove
+  , openUnionHandle
   , IsMember
+  , Contains
   -- ** 'Union' (used by 'OpenUnion')
   -- | 'OpenUnion' is a type synonym around 'Union'. Most users will be able to
   -- work directly with 'OpenUnion' and ignore this 'Union' type.
@@ -58,10 +62,15 @@ module Data.WorldPeace
   , absurdUnion
   , umap
   , catchesUnion
+  , relaxUnion
+  , unionRemove
+  , unionHandle
   -- *** Union optics
   , _This
   , _That
   -- *** Typeclasses used with Union
+  , ElemRemove
+  , Remove
   , Nat(Z, S)
   , RIndex
   , UElem(..)

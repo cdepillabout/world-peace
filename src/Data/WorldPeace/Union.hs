@@ -12,6 +12,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -41,6 +42,9 @@ module Data.WorldPeace.Union
   , catchesUnion
   , absurdUnion
   , umap
+  , relaxUnion
+  , unionRemove
+  , unionHandle
   -- ** Optics
   , _This
   , _That
@@ -50,6 +54,9 @@ module Data.WorldPeace.Union
   , ReturnX
   , UElem(..)
   , IsMember
+  , Contains
+  , Remove
+  , ElemRemove
   -- * OpenUnion
   , OpenUnion
   , openUnion
@@ -59,6 +66,9 @@ module Data.WorldPeace.Union
   , openUnionLift
   , openUnionMatch
   , catchesOpenUnion
+  , relaxOpenUnion
+  , openUnionRemove
+  , openUnionHandle
   -- * Setup code for doctests
   -- $setup
   ) where
@@ -68,6 +78,8 @@ import Control.DeepSeq (NFData(rnf))
 import Data.Aeson (FromJSON(parseJSON), ToJSON(toJSON), Value)
 import Data.Aeson.Types (Parser)
 import Data.Functor.Identity (Identity(Identity, runIdentity))
+import Data.Kind (Constraint)
+import Data.Proxy
 import Data.Typeable (Typeable)
 import Text.Read (Read(readPrec), ReadPrec, (<++))
 
@@ -89,11 +101,14 @@ import Data.WorldPeace.Product
   )
 
 -- $setup
+-- >>> :set -XConstraintKinds
 -- >>> :set -XDataKinds
 -- >>> :set -XGADTs
+-- >>> :set -XKindSignatures
 -- >>> :set -XTypeOperators
 -- >>> import Data.Text (Text)
 -- >>> import Text.Read (readMaybe)
+-- >>> import Data.Type.Equality ((:~:)(Refl))
 
 ------------------------
 -- Type-level helpers --
@@ -105,7 +120,6 @@ import Data.WorldPeace.Product
 --
 -- Find the first item:
 --
--- >>> import Data.Type.Equality ((:~:)(Refl))
 -- >>> Refl :: RIndex String '[String, Int] :~: 'Z
 -- Refl
 --
@@ -120,7 +134,6 @@ type family RIndex (r :: k) (rs :: [k]) :: Nat where
 -- | Change a list of types into a list of functions that take the given type
 -- and return @x@.
 --
--- >>> import Data.Type.Equality ((:~:)(Refl))
 -- >>> Refl :: ReturnX Double '[String, Int] :~: '[String -> Double, Int -> Double]
 -- Refl
 --
@@ -135,6 +148,22 @@ type family ReturnX x as where
 -- | A mere approximation of the natural numbers. And their image as lifted by
 -- @-XDataKinds@ corresponds to the actual natural numbers.
 data Nat = Z | S !Nat
+
+-- | This is a helpful 'Constraint' synonym to assert that @a@ is a member of
+-- @as@.  You can see how it is used in functions like 'openUnionLift'.
+type IsMember (a :: u) (as :: [u]) = UElem a as (RIndex a as)
+
+-- | A type family to assert that all of the types in a list are contained
+-- within another list.
+--
+-- >>> Refl :: Contains '[String] '[String, Char] :~: (IsMember String '[String, Char], (() :: Constraint))
+-- Refl
+--
+-- >>> Refl :: Contains '[] '[Int, Char] :~: (() :: Constraint)
+-- Refl
+type family Contains (as :: [k]) (bs :: [k]) :: Constraint where
+  Contains '[] _ = ()
+  Contains (a ': as) bs = (IsMember a bs, Contains as bs)
 
 -----------------------------
 -- Union (from Data.Union) --
@@ -172,6 +201,8 @@ data Union (f :: u -> *) (as :: [u]) where
 
 -- | Case analysis for 'Union'.
 --
+-- See 'unionHandle' for a more flexible version of this.
+--
 -- ==== __Examples__
 --
 --  Here is an example of matching on a 'This':
@@ -183,7 +214,7 @@ data Union (f :: u -> *) (as :: [u]) where
 --
 -- Here is an example of matching on a 'That':
 --
--- >>> let v = That (This (Identity 3.3)) :: Union Identity '[String, Double, Int]
+-- >>> let v = That (This (Identity 3.5)) :: Union Identity '[String, Double, Int]
 -- >>> union (const "not a String") runIdent v
 -- "not a String"
 union :: (Union f as -> c) -> (f a -> c) -> Union f (a ': as) -> c
@@ -248,6 +279,23 @@ catchesUnion
   => tuple -> Union f as -> f x
 catchesUnion tuple u = catchesUnionProduct (tupleToProduct tuple) u
 
+-- | Relaxes a 'Union' to a larger set of types.
+--
+-- Note that the result types have to completely contain the input types.
+--
+-- >>> let u = This (Identity 3.5) :: Union Identity '[Double, String]
+-- >>> relaxUnion u :: Union Identity '[Char, Double, Int, String, Float]
+-- Identity 3.5
+--
+-- The original types can be in a different order in the result 'Union':
+--
+-- >>> let u = That (This (Identity 3.5)) :: Union Identity '[String, Double]
+-- >>> relaxUnion u :: Union Identity '[Char, Double, Int, String, Float]
+-- Identity 3.5
+relaxUnion :: Contains as bs => Union f as -> Union f bs
+relaxUnion (This as) = unionLift as
+relaxUnion (That u) = relaxUnion u
+
 -- | Lens-compatible 'Prism' for 'This'.
 --
 -- ==== __Examples__
@@ -265,7 +313,7 @@ catchesUnion tuple u = catchesUnionProduct (tupleToProduct tuple) u
 --
 -- Use '_This' to try to destruct a 'Union' into a @f a@ (unsuccessfully):
 --
--- >>> let v = That (This (Identity 3.3)) :: Union Identity '[String, Double, Int]
+-- >>> let v = That (This (Identity 3.5)) :: Union Identity '[String, Double, Int]
 -- >>> preview _This v :: Maybe (Identity String)
 -- Nothing
 _This :: Prism (Union f (a ': as)) (Union f (b ': as)) (f a) (f b)
@@ -310,8 +358,8 @@ _That = prism That (union Right (Left . This))
 --
 -- As an end-user, you should never need to implement an additional instance of
 -- this typeclass.
-class i ~ RIndex a as => UElem (a :: u) (as :: [u]) (i :: Nat) where
-  {-# MINIMAL unionPrism | unionLift, unionMatch #-}
+class i ~ RIndex a as => UElem (a :: k) (as :: [k]) (i :: Nat) where
+  {-# MINIMAL unionPrism | (unionLift, unionMatch) #-}
 
   -- | This is implemented as @'prism'' 'unionLift' 'unionMatch'@.
   unionPrism :: Prism' (Union f as) (f a)
@@ -335,13 +383,203 @@ instance
     , UElem a as i
     )
     => UElem a (b ': as) ('S i) where
+
   unionPrism :: Prism' (Union f (b ': as)) (f a)
   unionPrism = _That . unionPrism
   {-# INLINE unionPrism #-}
 
--- | This is a helpful 'Constraint' synonym to assert that @a@ is a member of
--- @as@.  You can see how it is used in functions like 'openUnionLift'.
-type IsMember (a :: u) (as :: [u]) = UElem a as (RIndex a as)
+-- | This type family removes a type from a type-level list.
+--
+-- This is used to compute the type of the returned 'Union' in 'unionRemove'.
+--
+-- ==== __Examples__
+--
+-- >>> Refl :: Remove Double '[Double, String] :~: '[String]
+-- Refl
+--
+-- If the list contains multiple of the type, then they are all removed.
+--
+-- >>> Refl :: Remove Double '[Char, Double, String, Double] :~: '[Char, String]
+-- Refl
+--
+-- If the list is empty, then nothing is removed.
+--
+-- >>> Refl :: Remove Double '[] :~: '[]
+-- Refl
+type family Remove (a :: k) (as :: [k]) :: [k] where
+  Remove a '[] = '[]
+  Remove a (a ': xs) = Remove a xs
+  Remove a (b ': xs) = b ': Remove a xs
+
+-- | This is used internally to figure out which instance to pick for the
+-- 'ElemRemove\'' type class.
+--
+-- This is needed to work around overlapping instances.
+--
+-- >>> Refl :: RemoveCase Double '[Double, String] :~: 'CaseFirstSame
+-- Refl
+--
+-- >>> Refl :: RemoveCase Double '[Char, Double, Double] :~: 'CaseFirstDiff
+-- Refl
+--
+-- >>> Refl :: RemoveCase Double '[] :~: 'CaseEmpty
+-- Refl
+type family RemoveCase (a :: k) (as :: [k]) :: Cases where
+  RemoveCase a '[] = 'CaseEmpty
+  RemoveCase a (a ': xs) = 'CaseFirstSame
+  RemoveCase a (b ': xs) = 'CaseFirstDiff
+
+-- | This type alias is a 'Constraint' that is used when working with
+-- functions like 'unionRemove' or 'unionHandle'.
+--
+-- 'ElemRemove' gives you a way to specific types from a 'Union'.
+--
+-- Note that @'ElemRemove' a as@ doesn't force @a@ to be in @as@.  We are able
+-- to try to pull out a 'Double' from a @'Union' 'Identity' \'['Double']@:
+--
+-- >>> let u = This (Identity 3.5) :: Union Identity '[Double]
+-- >>> unionRemove u :: Either (Union Identity '[Double]) (Identity String)
+-- Left (Identity 3.5)
+--
+-- When writing your own functions using 'unionRemove', in order to make sure
+-- the @a@ is in @as@, you should combine 'ElemRemove' with 'IsMember'.
+--
+-- 'ElemRemove' uses some tricks to work correctly, so the underlying 'ElemRemove\''typeclass
+-- is not exported.
+type ElemRemove a as = ElemRemove' a as (RemoveCase a as)
+
+-- | This function allows you to try to remove individual types from a 'Union'.
+--
+-- This can be used to handle only certain types in a 'Union', instead of
+-- having to handle all of them at the same time.
+--
+-- ==== __Examples__
+--
+-- Handling a type in a 'Union':
+--
+-- >>> let u = This (Identity "hello") :: Union Identity '[String, Double]
+-- >>> unionRemove u :: Either (Union Identity '[Double]) (Identity String)
+-- Right (Identity "hello")
+--
+-- Failing to handle a type in a 'Union':
+--
+-- >>> let u = That (This (Identity 3.5)) :: Union Identity '[String, Double]
+-- >>> unionRemove u :: Either (Union Identity '[Double]) (Identity String)
+-- Left (Identity 3.5)
+--
+-- Note that if you have a 'Union' with multiple of the same type, they will
+-- all be handled at the same time:
+--
+-- >>> let u = That (This (Identity 3.5)) :: Union Identity '[String, Double, Char, Double]
+-- >>> unionRemove u :: Either (Union Identity '[String, Char]) (Identity Double)
+-- Right (Identity 3.5)
+unionRemove
+  :: forall a as f
+   . ElemRemove a as
+  => Union f as
+  -> Either (Union f (Remove a as)) (f a)
+unionRemove = unionRemove' (Proxy @(RemoveCase a as))
+{-# INLINE unionRemove #-}
+
+-- | This is used as a promoted data type to give a tag to the three different
+-- instances of 'ElemRemove\''.  These also correspond to the three different
+-- cases of 'Remove' and 'RemoveCase'.
+data Cases = CaseEmpty | CaseFirstSame | CaseFirstDiff
+
+-- | This is an internal typeclass used for removing elements from a 'Union'.
+--
+-- The most surprising thing about this is the last argument, @caseMatch@.
+-- This is used to stop GHC from seeing overlapping instances:
+--
+-- https://kseo.github.io/posts/2017-02-05-avoid-overlapping-instances-with-closed-type-families.html
+--
+-- Each of the instances of this correspond to one case in 'Remove' and
+-- 'RemoveCase'.
+class ElemRemove' (a :: k) (as :: [k]) (caseMatch :: Cases) where
+  unionRemove' :: Proxy caseMatch -> Union f as -> Either (Union f (Remove a as)) (f a)
+
+instance ElemRemove' a '[] 'CaseEmpty where
+  unionRemove'
+    :: Proxy 'CaseEmpty -> Union f '[] -> Either (Union f '[]) (f a)
+  unionRemove' _ u = absurdUnion u
+  {-# INLINE unionRemove' #-}
+
+instance
+    ( ElemRemove' a xs (RemoveCase a xs)
+    ) =>
+    ElemRemove' a (a ': xs) 'CaseFirstSame where
+  unionRemove'
+    :: forall f
+     . Proxy 'CaseFirstSame
+    -> Union f (a ': xs)
+    -> Either (Union f (Remove a xs)) (f a)
+  unionRemove' _ (This a) = Right a
+  unionRemove' _ (That u) = unionRemove' (Proxy @(RemoveCase a xs)) u
+
+instance
+    ( ElemRemove' a xs (RemoveCase a xs)
+    , -- We need to specify this equality because GHC doesn't realize it will
+      -- always work out this way.  We know that for this case, @a@ and @b@
+      -- will always be different (because of how the 'RemoveCase' type family
+      -- works and the fact that there is already another instance that handles
+      -- the case when @a@ and @b@ are the same type).
+      --
+      -- However, GHC doesn't realize this, so we have to specify it.
+      Remove a (b ': xs) ~ (b ': Remove a xs)
+    ) =>
+    ElemRemove' a (b ': xs) 'CaseFirstDiff where
+  unionRemove'
+    :: forall f
+     . Proxy 'CaseFirstDiff
+    -> Union f (b ': xs)
+    -> Either (Union f (b ': Remove a xs)) (f a)
+  unionRemove' _ (This b) = Left (This b)
+  unionRemove' _ (That u) =
+    case unionRemove' (Proxy @(RemoveCase a xs)) u of
+      Right fa -> Right fa
+      Left u2 -> Left (That u2)
+
+-- | Handle a single case on a 'Union'.  This is similar to 'union' but lets
+-- you handle any case within the 'Union'.
+--
+-- ==== __Examples__
+--
+-- Handling the first item in a 'Union'.
+--
+-- >>> let u = This 3.5 :: Union Identity '[Double, Int]
+-- >>> let printDouble = print :: Identity Double -> IO ()
+-- >>> let printUnion = print :: Union Identity '[Int] -> IO ()
+-- >>> unionHandle printUnion printDouble u
+-- Identity 3.5
+--
+-- Handling a middle item in a 'Union'.
+--
+-- >>> let u2 = That (This 3.5) :: Union Identity '[Char, Double, Int]
+-- >>> let printUnion = print :: Union Identity '[Char, Int] -> IO ()
+-- >>> unionHandle printUnion printDouble u2
+-- Identity 3.5
+--
+-- If you have duplicates in your 'Union', they will both get handled with
+-- a single call to 'unionHandle'.
+--
+-- >>> let u3 = That (This 3.5) :: Union Identity '[Double, Double, Int]
+-- >>> let printUnion = print :: Union Identity '[Int] -> IO ()
+-- >>> unionHandle printUnion printDouble u3
+-- Identity 3.5
+--
+-- Use 'absurdUnion' to handle an empty 'Union'.
+--
+-- >>> let u4 = This 3.5 :: Union Identity '[Double]
+-- >>> unionHandle (absurdUnion :: Union Identity '[] -> IO ()) printDouble u4
+-- Identity 3.5
+unionHandle
+  :: ElemRemove a as
+  => (Union f (Remove a as) -> b)
+  -> (f a -> b)
+  -> Union f as
+  -> b
+unionHandle unionHandler aHandler u =
+  either unionHandler aHandler $ unionRemove u
 
 ---------------
 -- OpenUnion --
@@ -363,7 +601,7 @@ type OpenUnion = Union Identity
 --
 -- Here is an example of unsuccessfully matching:
 --
--- >>> let double = 3.3 :: Double
+-- >>> let double = 3.5 :: Double
 -- >>> let p = openUnionLift double :: OpenUnion '[String, Double, Int]
 -- >>> openUnion (const "not a String") id p
 -- "not a String"
@@ -384,7 +622,7 @@ openUnion onThat onThis = union onThat (onThis . runIdentity)
 --
 -- Here is an example of unsuccessfully matching:
 --
--- >>> let double = 3.3 :: Double
+-- >>> let double = 3.5 :: Double
 -- >>> let p = openUnionLift double :: OpenUnion '[String, Double, Int]
 -- >>> fromOpenUnion (const "not a String") p
 -- "not a String"
@@ -431,7 +669,7 @@ openUnionLift = review openUnionPrism
 --
 -- Failure matching:
 --
--- >>> let double = 3.3 :: Double
+-- >>> let double = 3.5 :: Double
 -- >>> let p = openUnionLift double :: OpenUnion '[Double, String]
 -- >>> openUnionMatch p :: Maybe String
 -- Nothing
@@ -491,6 +729,99 @@ catchesOpenUnion
 catchesOpenUnion tuple u =
   runIdentity $
     catchesUnionProduct (tupleToOpenProduct tuple) u
+
+-- | Just like 'relaxUnion' but for 'OpenUnion'.
+--
+-- >>> let u = openUnionLift (3.5 :: Double) :: Union Identity '[Double, String]
+-- >>> relaxOpenUnion u :: Union Identity '[Char, Double, Int, String, Float]
+-- Identity 3.5
+relaxOpenUnion :: Contains as bs => OpenUnion as -> OpenUnion bs
+relaxOpenUnion (This as) = unionLift as
+relaxOpenUnion (That u) = relaxUnion u
+
+-- | This function allows you to try to remove individual types from an
+-- 'OpenUnion'.
+--
+-- This can be used to handle only certain types in an 'OpenUnion', instead of
+-- having to handle all of them at the same time.  This can be more convenient
+-- than a function like 'catchesOpenUnion'.
+--
+-- ==== __Examples__
+--
+-- Handling a type in an 'OpenUnion':
+--
+-- >>> let u = openUnionLift ("hello" :: String) :: OpenUnion '[String, Double]
+-- >>> openUnionRemove u :: Either (OpenUnion '[Double]) String
+-- Right "hello"
+--
+-- Failing to handle a type in an 'OpenUnion':
+--
+-- >>> let u = openUnionLift (3.5 :: Double) :: OpenUnion '[String, Double]
+-- >>> openUnionRemove u :: Either (OpenUnion '[Double]) String
+-- Left (Identity 3.5)
+--
+-- Note that if you have an 'OpenUnion' with multiple of the same type, they will
+-- all be handled at the same time:
+--
+-- >>> let u = That (This (Identity 3.5)) :: OpenUnion '[String, Double, Char, Double]
+-- >>> openUnionRemove u :: Either (OpenUnion '[String, Char]) Double
+-- Right 3.5
+openUnionRemove
+  :: forall a as
+   . ElemRemove a as
+  => OpenUnion as
+  -> Either (OpenUnion (Remove a as)) a
+openUnionRemove = fmap runIdentity . unionRemove
+
+-- | Handle a single case in an 'OpenUnion'.  This is similar to 'openUnion'
+-- but lets you handle any case within the 'OpenUnion', not just the first one.
+--
+-- ==== __Examples__
+--
+-- Handling the first item in an 'OpenUnion':
+--
+-- >>> let u = This 3.5 :: OpenUnion '[Double, Int]
+-- >>> let printDouble = print :: Double -> IO ()
+-- >>> let printUnion = print :: OpenUnion '[Int] -> IO ()
+-- >>> openUnionHandle printUnion printDouble u
+-- 3.5
+--
+-- Handling a middle item in an 'OpenUnion':
+--
+-- >>> let u2 = openUnionLift (3.5 :: Double) :: OpenUnion '[Char, Double, Int]
+-- >>> let printUnion = print :: OpenUnion '[Char, Int] -> IO ()
+-- >>> openUnionHandle printUnion printDouble u2
+-- 3.5
+--
+-- Failing to handle an item in an 'OpenUnion'.  In the following example, the
+-- @printUnion@ function is called:
+--
+-- >>> let u2 = openUnionLift 'c' :: OpenUnion '[Char, Double, Int]
+-- >>> let printUnion = print :: OpenUnion '[Char, Int] -> IO ()
+-- >>> openUnionHandle printUnion printDouble u2
+-- Identity 'c'
+--
+-- If you have duplicates in your 'OpenUnion', they will both get handled with
+-- a single call to 'openUnionHandle'.
+--
+-- >>> let u3 = That (This 3.5) :: OpenUnion '[Double, Double, Int]
+-- >>> let printUnion = print :: OpenUnion '[Int] -> IO ()
+-- >>> openUnionHandle printUnion printDouble u3
+-- 3.5
+--
+-- Use 'absurdOpenUnion' to handle an empty 'OpenUnion':
+--
+-- >>> let u4 = This 3.5 :: OpenUnion '[Double]
+-- >>> openUnionHandle (absurdUnion :: OpenUnion '[] -> IO ()) printDouble u4
+-- 3.5
+openUnionHandle
+  :: ElemRemove a as
+  => (OpenUnion (Remove a as) -> b)
+  -> (a -> b)
+  -> OpenUnion as
+  -> b
+openUnionHandle unionHandler aHandler =
+  unionHandle unionHandler (aHandler . runIdentity)
 
 ---------------
 -- Instances --
@@ -616,7 +947,3 @@ instance (FromJSON (f a), FromJSON (Union f as)) => FromJSON (Union f (a ': as))
 --       where
 --         matchR = This . Identity <$> fromException sE
 --         matchL = That <$> fromException sE
-
-
-
-
