@@ -81,6 +81,7 @@ import Data.Functor.Identity (Identity(Identity, runIdentity))
 import Data.Kind (Constraint)
 import Data.Proxy
 import Data.Typeable (Typeable)
+import GHC.TypeLits (ErrorMessage(..), TypeError)
 import Text.Read (Read(readPrec), ReadPrec, (<++))
 
 import Data.WorldPeace.Internal.Prism
@@ -131,6 +132,35 @@ type family RIndex (r :: k) (rs :: [k]) :: Nat where
   RIndex r (r ': rs) = 'Z
   RIndex r (s ': rs) = 'S (RIndex r rs)
 
+-- | Text of the error message.
+type NoElementError (r :: k) (rs :: [k]) =
+          'Text "You require open sum type to contain the following element:"
+    ':$$: 'Text ""
+    ':$$: 'Text "    " ':<>: 'ShowType r
+    ':$$: 'Text ""
+    ':$$: 'Text "However, given list can store elements only of the following types:"
+    ':$$: 'Text ""
+    ':$$: 'Text "    " ':<>: 'ShowType rs
+    ':$$: 'Text ""
+
+-- | This type family checks whether @a@ is inside @as@ and produces
+-- compile-time error if not.
+type family CheckElem (a :: k) (as :: [k]) :: Constraint where
+    CheckElem a as = MemberElem (Elem a as) a as
+
+-- | Helper type family. There is no lazy @if@ on type level, so we need to
+-- pattern on the result of the 'Elem' type family to decide what do we need to
+-- return: empty constraint or 'TypeError'.
+type family MemberElem (isElem :: Bool) (a :: k) (as :: [k]) :: Constraint where
+    MemberElem 'True  a as = ()
+    MemberElem 'False a as = TypeError (NoElementError a as)
+
+-- | Type-level version of the 'elem' function.
+type family Elem (x :: k) (xs :: [k]) :: Bool where
+    Elem _ '[]       = 'False
+    Elem x (x ': xs) = 'True
+    Elem x (y ': xs) = Elem x xs
+
 -- | Change a list of types into a list of functions that take the given type
 -- and return @x@.
 --
@@ -151,7 +181,7 @@ data Nat = Z | S !Nat
 
 -- | This is a helpful 'Constraint' synonym to assert that @a@ is a member of
 -- @as@.  You can see how it is used in functions like 'openUnionLift'.
-type IsMember (a :: u) (as :: [u]) = UElem a as (RIndex a as)
+type IsMember (a :: u) (as :: [u]) = (CheckElem a as, UElem a as (RIndex a as))
 
 -- | A type family to assert that all of the types in a list are contained
 -- within another list.
