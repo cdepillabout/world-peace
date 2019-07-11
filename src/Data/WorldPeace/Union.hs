@@ -435,7 +435,9 @@ type family RemoveCase (a :: k) (as :: [k]) :: Cases where
 -- 'ElemRemove' gives you a way to specific types from a 'Union'.
 --
 -- Note that @'ElemRemove' a as@ doesn't force @a@ to be in @as@.  We are able
--- to try to pull out a 'Double' from a @'Union' 'Identity' \'['Double']@:
+-- to use 'unionRemove' to try to pull out a 'String' from a
+-- @'Union' 'Identity' \'['Double']@ (even though there is no way this 'Union'
+-- could -- contain a 'String'):
 --
 -- >>> let u = This (Identity 3.5) :: Union Identity '[Double]
 -- >>> unionRemove u :: Either (Union Identity '[Double]) (Identity String)

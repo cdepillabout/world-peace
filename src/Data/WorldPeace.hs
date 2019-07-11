@@ -25,8 +25,8 @@ The easiest one is to use 'catchesOpenUnion', which takes a tuple of handlers fo
 each possible type in the 'OpenUnion':
 
 @
-  let strHandler = (\str -> \"got a String: \" '++' str) :: 'String' -> 'String'
-      intHandler = (\int -> \"got an Int: \" '++' 'show' int) :: 'Int' -> 'String'
+  let strHandler = (\\str -> \"got a String: \" '++' str) :: 'String' -> 'String'
+      intHandler = (\\int -> \"got an Int: \" '++' 'show' int) :: 'Int' -> 'String'
   in 'catchesOpenUnion' (strHandler, intHandler) u :: 'String'
 @
 
