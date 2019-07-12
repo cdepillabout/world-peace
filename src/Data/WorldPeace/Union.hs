@@ -135,13 +135,9 @@ type family RIndex (r :: k) (rs :: [k]) :: Nat where
 -- | Text of the error message.
 type NoElementError (r :: k) (rs :: [k]) =
           'Text "You require open sum type to contain the following element:"
-    ':$$: 'Text ""
     ':$$: 'Text "    " ':<>: 'ShowType r
-    ':$$: 'Text ""
     ':$$: 'Text "However, given list can store elements only of the following types:"
-    ':$$: 'Text ""
     ':$$: 'Text "    " ':<>: 'ShowType rs
-    ':$$: 'Text ""
 
 -- | This type family checks whether @a@ is inside @as@ and produces
 -- compile-time error if not.
@@ -618,6 +614,8 @@ unionHandle unionHandler aHandler u =
 ---------------
 
 -- | We can use @'Union' 'Identity'@ as a standard open sum type.
+--
+-- See the documentation for 'Union'.
 type OpenUnion = Union Identity
 
 -- | Case analysis for 'OpenUnion'.
@@ -677,11 +675,25 @@ openUnionPrism = unionPrism . iso runIdentity Identity
 
 -- | Just like 'unionLift' but for 'OpenUnion'.
 --
+-- ==== __Examples__
+--
 -- Creating an 'OpenUnion':
 --
 -- >>> let string = "hello" :: String
 -- >>> openUnionLift string :: OpenUnion '[Double, String, Int]
 -- Identity "hello"
+--
+-- You will get a compile error if you try to create an 'OpenUnion' that
+-- doesn't contain the type:
+--
+-- >>> let float = 3.5 :: Float
+-- >>> openUnionLift float :: OpenUnion '[Double, Int]
+-- ...
+--     • You require open sum type to contain the following element:
+--           Float
+--       However, given list can store elements only of the following types:
+--           '[Double, Int]
+-- ...
 openUnionLift
   :: forall a as.
      IsMember a as
@@ -705,6 +717,18 @@ openUnionLift = review openUnionPrism
 -- >>> let p = openUnionLift double :: OpenUnion '[Double, String]
 -- >>> openUnionMatch p :: Maybe String
 -- Nothing
+--
+-- You will get a compile error if you try to pull out an element from
+-- the 'OpenUnion' that doesn't exist within it.
+--
+-- >>> let o2 = openUnionLift double :: OpenUnion '[Double, Char]
+-- >>> openUnionMatch o2 :: Maybe Float
+-- ...
+--     • You require open sum type to contain the following element:
+--           Float
+--       However, given list can store elements only of the following types:
+--           '[Double, Char]
+-- ...
 openUnionMatch
   :: forall a as.
      IsMember a as
