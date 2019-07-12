@@ -141,17 +141,26 @@ type NoElementError (r :: k) (rs :: [k]) =
 
 -- | This type family checks whether @a@ is inside @as@ and produces
 -- compile-time error if not.
-type family CheckElem (a :: k) (as :: [k]) :: Constraint where
-    CheckElem a as = MemberElem (Elem a as) a as
+type family CheckElemIsMember (a :: k) (as :: [k]) :: Constraint where
+    CheckElemIsMember a as =
+      If (Elem a as) (() :: Constraint) (TypeError (NoElementError a as))
 
--- | Helper type family. There is no lazy @if@ on type level, so we need to
--- pattern on the result of the 'Elem' type family to decide what do we need to
--- return: empty constraint or 'TypeError'.
-type family MemberElem (isElem :: Bool) (a :: k) (as :: [k]) :: Constraint where
-    MemberElem 'True  a as = ()
-    MemberElem 'False a as = TypeError (NoElementError a as)
+-- | Type-level @if@.
+--
+-- >>> Refl :: If 'True String Double :~: String
+-- Refl
+-- >>> Refl :: If 'False String Double :~: Double
+-- Refl
+type family If (bool :: Bool) (thenCase :: k) (elseCase :: k) :: k where
+  If 'True thenCase _ = thenCase
+  If 'False _ elseCase = elseCase
 
 -- | Type-level version of the 'elem' function.
+--
+-- >>> Refl :: Elem String '[Double, String, Char] :~: 'True
+-- Refl
+-- >>> Refl :: Elem String '[Double, Char] :~: 'False
+-- Refl
 type family Elem (x :: k) (xs :: [k]) :: Bool where
     Elem _ '[]       = 'False
     Elem x (x ': xs) = 'True
@@ -177,7 +186,7 @@ data Nat = Z | S !Nat
 
 -- | This is a helpful 'Constraint' synonym to assert that @a@ is a member of
 -- @as@.  You can see how it is used in functions like 'openUnionLift'.
-type IsMember (a :: u) (as :: [u]) = (CheckElem a as, UElem a as (RIndex a as))
+type IsMember (a :: u) (as :: [u]) = (CheckElemIsMember a as, UElem a as (RIndex a as))
 
 -- | A type family to assert that all of the types in a list are contained
 -- within another list.
