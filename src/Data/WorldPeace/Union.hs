@@ -80,6 +80,7 @@ import Data.Aeson.Types (Parser)
 import Data.Functor.Identity (Identity(Identity, runIdentity))
 import Data.Kind (Constraint)
 import Data.Proxy
+import Data.Type.Bool (If)
 import Data.Typeable (Typeable)
 import GHC.TypeLits (ErrorMessage(..), TypeError)
 import Text.Read (Read(readPrec), ReadPrec, (<++))
@@ -144,16 +145,6 @@ type NoElementError (r :: k) (rs :: [k]) =
 type family CheckElemIsMember (a :: k) (as :: [k]) :: Constraint where
     CheckElemIsMember a as =
       If (Elem a as) (() :: Constraint) (TypeError (NoElementError a as))
-
--- | Type-level @if@.
---
--- >>> Refl :: If 'True String Double :~: String
--- Refl
--- >>> Refl :: If 'False String Double :~: Double
--- Refl
-type family If (bool :: Bool) (thenCase :: k) (elseCase :: k) :: k where
-  If 'True thenCase _ = thenCase
-  If 'False _ elseCase = elseCase
 
 -- | Type-level version of the 'elem' function.
 --
