@@ -81,6 +81,7 @@ import Data.Functor.Identity (Identity(Identity, runIdentity))
 import Data.Kind (Constraint)
 import Data.Proxy
 import Data.Typeable (Typeable)
+import GHC.TypeLits (ErrorMessage(..), TypeError)
 import Text.Read (Read(readPrec), ReadPrec, (<++))
 
 import Data.WorldPeace.Internal.Prism
@@ -131,6 +132,40 @@ type family RIndex (r :: k) (rs :: [k]) :: Nat where
   RIndex r (r ': rs) = 'Z
   RIndex r (s ': rs) = 'S (RIndex r rs)
 
+-- | Text of the error message.
+type NoElementError (r :: k) (rs :: [k]) =
+          'Text "You require open sum type to contain the following element:"
+    ':$$: 'Text "    " ':<>: 'ShowType r
+    ':$$: 'Text "However, given list can store elements only of the following types:"
+    ':$$: 'Text "    " ':<>: 'ShowType rs
+
+-- | This type family checks whether @a@ is inside @as@ and produces
+-- compile-time error if not.
+type family CheckElemIsMember (a :: k) (as :: [k]) :: Constraint where
+    CheckElemIsMember a as =
+      If (Elem a as) (() :: Constraint) (TypeError (NoElementError a as))
+
+-- | Type-level @if@.
+--
+-- >>> Refl :: If 'True String Double :~: String
+-- Refl
+-- >>> Refl :: If 'False String Double :~: Double
+-- Refl
+type family If (bool :: Bool) (thenCase :: k) (elseCase :: k) :: k where
+  If 'True thenCase _ = thenCase
+  If 'False _ elseCase = elseCase
+
+-- | Type-level version of the 'elem' function.
+--
+-- >>> Refl :: Elem String '[Double, String, Char] :~: 'True
+-- Refl
+-- >>> Refl :: Elem String '[Double, Char] :~: 'False
+-- Refl
+type family Elem (x :: k) (xs :: [k]) :: Bool where
+    Elem _ '[]       = 'False
+    Elem x (x ': xs) = 'True
+    Elem x (y ': xs) = Elem x xs
+
 -- | Change a list of types into a list of functions that take the given type
 -- and return @x@.
 --
@@ -151,7 +186,7 @@ data Nat = Z | S !Nat
 
 -- | This is a helpful 'Constraint' synonym to assert that @a@ is a member of
 -- @as@.  You can see how it is used in functions like 'openUnionLift'.
-type IsMember (a :: u) (as :: [u]) = UElem a as (RIndex a as)
+type IsMember (a :: u) (as :: [u]) = (CheckElemIsMember a as, UElem a as (RIndex a as))
 
 -- | A type family to assert that all of the types in a list are contained
 -- within another list.
@@ -588,6 +623,8 @@ unionHandle unionHandler aHandler u =
 ---------------
 
 -- | We can use @'Union' 'Identity'@ as a standard open sum type.
+--
+-- See the documentation for 'Union'.
 type OpenUnion = Union Identity
 
 -- | Case analysis for 'OpenUnion'.
@@ -647,11 +684,25 @@ openUnionPrism = unionPrism . iso runIdentity Identity
 
 -- | Just like 'unionLift' but for 'OpenUnion'.
 --
+-- ==== __Examples__
+--
 -- Creating an 'OpenUnion':
 --
 -- >>> let string = "hello" :: String
 -- >>> openUnionLift string :: OpenUnion '[Double, String, Int]
 -- Identity "hello"
+--
+-- You will get a compile error if you try to create an 'OpenUnion' that
+-- doesn't contain the type:
+--
+-- >>> let float = 3.5 :: Float
+-- >>> openUnionLift float :: OpenUnion '[Double, Int]
+-- ...
+--     • You require open sum type to contain the following element:
+--           Float
+--       However, given list can store elements only of the following types:
+--           '[Double, Int]
+-- ...
 openUnionLift
   :: forall a as.
      IsMember a as
@@ -675,6 +726,18 @@ openUnionLift = review openUnionPrism
 -- >>> let p = openUnionLift double :: OpenUnion '[Double, String]
 -- >>> openUnionMatch p :: Maybe String
 -- Nothing
+--
+-- You will get a compile error if you try to pull out an element from
+-- the 'OpenUnion' that doesn't exist within it.
+--
+-- >>> let o2 = openUnionLift double :: OpenUnion '[Double, Char]
+-- >>> openUnionMatch o2 :: Maybe Float
+-- ...
+--     • You require open sum type to contain the following element:
+--           Float
+--       However, given list can store elements only of the following types:
+--           '[Double, Char]
+-- ...
 openUnionMatch
   :: forall a as.
      IsMember a as
