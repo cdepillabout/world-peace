@@ -1,4 +1,8 @@
 
+## 1.0.1.0
+
+*   Update `IsMember` to show a nice custom type error.  Thanks @chshersh! [#5]
+
 ## 1.0.0.0
 
 *   Add the functions `relaxOpenUnion` and `relaxUnion` for being able to add
