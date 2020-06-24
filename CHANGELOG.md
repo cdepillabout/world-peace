@@ -1,3 +1,8 @@
+## 1.0.2.0
+
+*   Get building on GHC-8.10 by quantifying kind in some type class instances.
+    Thanks [@ocharles](https://github.com/ocharles)!
+    [#8](https://github.com/cdepillabout/world-peace/pull/8)
 
 ## 1.0.1.0
 
